@@ -12,6 +12,11 @@ export namespace AuthApi {
     accessToken: string;
   }
 
+  export interface RawLoginResult {
+    access_token: string;
+    token_type: string;
+  }
+
   export interface RefreshTokenResult {
     data: string;
     status: number;
@@ -22,7 +27,21 @@ export namespace AuthApi {
  * 登录
  */
 export async function loginApi(data: AuthApi.LoginParams) {
-  return requestClient.post<AuthApi.LoginResult>('/auth/login', data);
+  const form = new URLSearchParams();
+  form.set('username', data.username ?? '');
+  form.set('password', data.password ?? '');
+  const result = await requestClient.post<AuthApi.RawLoginResult>(
+    '/auth/login',
+    form,
+    {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    },
+  );
+  return {
+    accessToken: result.access_token,
+  };
 }
 
 /**
@@ -47,5 +66,6 @@ export async function logoutApi() {
  * 获取用户权限码
  */
 export async function getAccessCodesApi() {
-  return requestClient.get<string[]>('/auth/codes');
+  const user = await requestClient.get<{ role: string }>('/users/userInfo');
+  return [user.role];
 }

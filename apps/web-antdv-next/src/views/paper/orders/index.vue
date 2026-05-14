@@ -1,0 +1,163 @@
+<script lang="ts" setup>
+import type { PaperOrderItem } from '#/api';
+
+import { onMounted, ref } from 'vue';
+
+import { Page } from '@vben/common-ui';
+
+import { message } from 'antdv-next';
+
+import { getMyPaperOrderDetail, listMyPaperOrders } from '#/api';
+
+const loading = ref(false);
+const orders = ref<PaperOrderItem[]>([]);
+const total = ref(0);
+const page = ref(1);
+const detail = ref<any>(null);
+const detailOpen = ref(false);
+const statusColorMap: Record<string, string> = {
+  completed: 'green',
+  created: 'default',
+  failed: 'red',
+  generating: 'blue',
+  paid: 'cyan',
+  refunded: 'orange',
+};
+const statusTextMap: Record<string, string> = {
+  completed: '已完成',
+  created: '待支付',
+  failed: '生成失败',
+  generating: '生成中',
+  paid: '已扣费',
+  refunded: '已退款',
+};
+
+async function fetchOrders() {
+  loading.value = true;
+  try {
+    const res = await listMyPaperOrders(page.value, 10);
+    orders.value = res.items;
+    total.value = res.total;
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function openDetail(order: PaperOrderItem) {
+  detail.value = await getMyPaperOrderDetail(order.order_sn);
+  detailOpen.value = true;
+}
+
+function copyUrl(url?: null | string) {
+  if (!url) return;
+  navigator.clipboard?.writeText(url);
+  message.success('下载链接已复制');
+}
+
+onMounted(fetchOrders);
+</script>
+
+<template>
+  <Page
+    content-class="space-y-4"
+    description="查看论文生成订单、任务状态、下载链接和失败原因。"
+    title="我的订单"
+  >
+    <a-row :gutter="[16, 16]" class="mb-4">
+      <a-col :lg="6" :sm="12" :xs="24">
+        <a-card>
+          <a-statistic title="订单总数" :value="total" />
+        </a-card>
+      </a-col>
+      <a-col :lg="6" :sm="12" :xs="24">
+        <a-card>
+          <a-statistic
+            title="已完成"
+            :value="orders.filter((item) => item.status === 'completed').length"
+          />
+        </a-card>
+      </a-col>
+      <a-col :lg="6" :sm="12" :xs="24">
+        <a-card>
+          <a-statistic
+            title="生成中"
+            :value="orders.filter((item) => ['paid', 'generating'].includes(item.status)).length"
+          />
+        </a-card>
+      </a-col>
+      <a-col :lg="6" :sm="12" :xs="24">
+        <a-card>
+          <a-statistic
+            title="失败订单"
+            :value="orders.filter((item) => item.status === 'failed').length"
+          />
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <a-card title="订单列表">
+      <template #extra>
+        <a-button :loading="loading" @click="fetchOrders">刷新</a-button>
+      </template>
+      <a-table
+        row-key="id"
+        :columns="[
+          { title: '订单号', dataIndex: 'order_sn' },
+          { title: '标题', dataIndex: 'title' },
+          { title: '状态', dataIndex: 'status' },
+          { title: '消耗积分', dataIndex: 'paid_points' },
+          { title: '创建时间', dataIndex: 'created_at' },
+          { title: '完成时间', dataIndex: 'completed_at' },
+          { title: '操作', key: 'action' },
+        ]"
+        :data-source="orders"
+        :loading="loading"
+        :pagination="{ current: page, total, pageSize: 10 }"
+        :scroll="{ x: 1000 }"
+        @change="(pagination:any) => { page = pagination.current; fetchOrders(); }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.dataIndex === 'status'">
+            <a-tag :color="statusColorMap[record.status] || 'default'">
+              {{ statusTextMap[record.status] || record.status }}
+            </a-tag>
+          </template>
+          <template v-if="column.key === 'action'">
+            <a-space>
+              <a-button size="small" @click="openDetail(record)">详情</a-button>
+              <a-button v-if="record.download_url" size="small" type="primary" @click="copyUrl(record.download_url)">复制下载</a-button>
+            </a-space>
+          </template>
+        </template>
+        <template #emptyText>
+          <a-empty description="暂无论文订单，先去生成一个免费大纲" />
+        </template>
+      </a-table>
+    </a-card>
+
+    <a-drawer v-model:open="detailOpen" width="720" title="订单详情" @close="detail = null">
+      <a-descriptions v-if="detail" :column="1" bordered size="small">
+        <a-descriptions-item label="订单号">{{ detail.order_sn }}</a-descriptions-item>
+        <a-descriptions-item label="标题">{{ detail.title }}</a-descriptions-item>
+        <a-descriptions-item label="状态">
+          <a-tag :color="statusColorMap[detail.status] || 'default'">
+            {{ statusTextMap[detail.status] || detail.status }}
+          </a-tag>
+        </a-descriptions-item>
+        <a-descriptions-item label="扣费积分">{{ detail.paid_points }}</a-descriptions-item>
+        <a-descriptions-item label="退回积分">{{ detail.refunded_points }}</a-descriptions-item>
+        <a-descriptions-item label="任务 ID">{{ detail.task_id || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="下载链接">
+          <a-space v-if="detail.download_url">
+            <a-typography-text copyable>{{ detail.download_url }}</a-typography-text>
+            <a-button size="small" type="link" @click="copyUrl(detail.download_url)">复制</a-button>
+          </a-space>
+          <span v-else>-</span>
+        </a-descriptions-item>
+        <a-descriptions-item label="错误信息">{{ detail.error_msg || '-' }}</a-descriptions-item>
+      </a-descriptions>
+      <a-divider>大纲快照</a-divider>
+      <pre class="max-h-96 overflow-auto rounded bg-gray-100 p-3 text-xs">{{ JSON.stringify(detail?.outline_json, null, 2) }}</pre>
+    </a-drawer>
+  </Page>
+</template>

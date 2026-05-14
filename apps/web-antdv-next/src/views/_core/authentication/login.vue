@@ -2,9 +2,9 @@
 import type { VbenFormSchema } from '@vben/common-ui';
 import type { BasicOption } from '@vben/types';
 
-import { computed, markRaw } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
-import { AuthenticationLogin, SliderCaptcha, z } from '@vben/common-ui';
+import { AuthenticationLogin, z } from '@vben/common-ui';
 import { $t } from '@vben/locales';
 
 import { useAuthStore } from '#/store';
@@ -13,27 +13,53 @@ defineOptions({ name: 'Login' });
 
 const authStore = useAuthStore();
 
-const MOCK_USER_OPTIONS: BasicOption[] = [
+interface LoginAccountOption extends BasicOption {
+  password: string;
+  username: string;
+}
+
+const loginRef = ref<InstanceType<typeof AuthenticationLogin>>();
+
+const LOGIN_ACCOUNT_OPTIONS: LoginAccountOption[] = [
   {
-    label: 'Super',
-    value: 'vben',
-  },
-  {
-    label: 'Admin',
+    label: 'admin',
+    password: 'Admin@123456',
+    username: 'admin',
     value: 'admin',
   },
   {
-    label: 'User',
-    value: 'jack',
+    label: 'user',
+    password: 'User@123456',
+    username: 'user',
+    value: 'user',
   },
 ];
+
+function getLoginAccount(value: string) {
+  return (
+    LOGIN_ACCOUNT_OPTIONS.find((item) => item.value === value) ??
+    LOGIN_ACCOUNT_OPTIONS[0]!
+  );
+}
+
+function fillAccount(value: string) {
+  const account = getLoginAccount(value);
+  loginRef.value?.getFormApi().setValues({
+    password: account.password,
+    selectAccount: account.value,
+    username: account.username,
+  });
+}
 
 const formSchema = computed((): VbenFormSchema[] => {
   return [
     {
       component: 'VbenSelect',
       componentProps: {
-        options: MOCK_USER_OPTIONS,
+        options: LOGIN_ACCOUNT_OPTIONS.map(({ label, value }) => ({
+          label,
+          value,
+        })),
         placeholder: $t('authentication.selectAccount'),
       },
       fieldName: 'selectAccount',
@@ -42,57 +68,66 @@ const formSchema = computed((): VbenFormSchema[] => {
         .string()
         .min(1, { message: $t('authentication.selectAccount') })
         .optional()
-        .default('vben'),
+        .default('admin'),
     },
     {
       component: 'VbenInput',
       componentProps: {
         placeholder: $t('authentication.usernameTip'),
+        readonly: true,
       },
       dependencies: {
         trigger(values, form) {
           if (values.selectAccount) {
-            const findUser = MOCK_USER_OPTIONS.find(
-              (item) => item.value === values.selectAccount,
-            );
-            if (findUser) {
-              form.setValues({
-                password: '123456',
-                username: findUser.value,
-              });
-            }
+            const account = getLoginAccount(values.selectAccount);
+            form.setValues({
+              password: account.password,
+              username: account.username,
+            });
           }
         },
         triggerFields: ['selectAccount'],
       },
       fieldName: 'username',
       label: $t('authentication.username'),
-      rules: z.string().min(1, { message: $t('authentication.usernameTip') }),
+      rules: z
+        .string()
+        .min(1, { message: $t('authentication.usernameTip') })
+        .default('admin'),
     },
     {
       component: 'VbenInputPassword',
       componentProps: {
         placeholder: $t('authentication.password'),
+        readonly: true,
       },
       fieldName: 'password',
       label: $t('authentication.password'),
-      rules: z.string().min(1, { message: $t('authentication.passwordTip') }),
-    },
-    {
-      component: markRaw(SliderCaptcha),
-      fieldName: 'captcha',
-      rules: z.boolean().refine((value) => value, {
-        message: $t('authentication.verifyRequiredTip'),
-      }),
+      rules: z
+        .string()
+        .min(1, { message: $t('authentication.passwordTip') })
+        .default('Admin@123456'),
     },
   ];
+});
+
+onMounted(async () => {
+  await nextTick();
+  fillAccount('admin');
 });
 </script>
 
 <template>
   <AuthenticationLogin
+    ref="loginRef"
     :form-schema="formSchema"
     :loading="authStore.loginLoading"
+    :show-code-login="false"
+    :show-forget-password="false"
+    :show-qrcode-login="false"
+    :show-register="false"
+    :show-remember-me="false"
+    :show-third-party-login="false"
     @submit="authStore.authLogin"
   />
 </template>

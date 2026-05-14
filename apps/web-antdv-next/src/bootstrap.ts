@@ -9,6 +9,8 @@ import '@vben/styles/antdv-next';
 
 import { useTitle } from '@vueuse/core';
 
+import Antd from 'antdv-next';
+
 import { $t, setupI18n } from '#/locales';
 
 import { initComponentAdapter } from './adapter/component';
@@ -52,6 +54,9 @@ async function bootstrap(namespace: string) {
   // 初始化 tippy
   const { initTippy } = await import('@vben/common-ui/es/tippy');
   initTippy(app);
+
+  // 注册 Antdv Next 全量组件，页面中可直接使用 <a-card> / <a-table> 等组件。
+  app.use(Antd);
 
   // 配置路由及路由守卫
   app.use(router);
