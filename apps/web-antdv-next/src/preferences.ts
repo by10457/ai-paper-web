@@ -11,4 +11,9 @@ export const overridesPreferences = defineOverridesPreferences({
     defaultHomePath: '/paper/generate',
     name: import.meta.env.VITE_APP_TITLE,
   },
+  widget: {
+    languageToggle: false,
+    notification: false,
+    timezone: false,
+  },
 });

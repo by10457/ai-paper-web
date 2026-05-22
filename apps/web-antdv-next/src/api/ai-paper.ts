@@ -117,6 +117,8 @@ export interface RechargeOrder {
   status_text: string;
 }
 
+const AI_OUTLINE_TIMEOUT = 180_000;
+
 export function getPaperPrice() {
   return requestClient.get<PaperPrice>('/thesis/price');
 }
@@ -127,7 +129,9 @@ export function createPaperOutline(data: {
   three_level?: boolean;
   title: string;
 }) {
-  return requestClient.post<PaperOutlineRecord>('/thesis/outlines', data);
+  return requestClient.post<PaperOutlineRecord>('/thesis/outlines', data, {
+    timeout: AI_OUTLINE_TIMEOUT,
+  });
 }
 
 export function createPaperOrder(data: {

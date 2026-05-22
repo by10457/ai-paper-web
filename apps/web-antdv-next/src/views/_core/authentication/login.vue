@@ -23,15 +23,15 @@ const loginRef = ref<InstanceType<typeof AuthenticationLogin>>();
 const LOGIN_ACCOUNT_OPTIONS: LoginAccountOption[] = [
   {
     label: 'admin',
-    password: 'Admin@123456',
+    password: 'demo123456',
     username: 'admin',
     value: 'admin',
   },
   {
-    label: 'user',
-    password: 'User@123456',
-    username: 'user',
-    value: 'user',
+    label: 'by10457',
+    password: 'demo123456',
+    username: 'by10457',
+    value: 'by10457',
   },
 ];
 
@@ -106,7 +106,7 @@ const formSchema = computed((): VbenFormSchema[] => {
       rules: z
         .string()
         .min(1, { message: $t('authentication.passwordTip') })
-        .default('Admin@123456'),
+        .default('demo123456'),
     },
   ];
 });
