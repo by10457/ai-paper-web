@@ -1,11 +1,12 @@
 <script lang="ts" setup>
 import type { AdminUser, AdminUserDetail } from '#/api';
 
-import { computed, onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 
 import { confirm, Page } from '@vben/common-ui';
 
 import { message } from 'antdv-next';
+import dayjs from 'dayjs';
 
 import {
   adjustUserPoints,
@@ -40,16 +41,14 @@ const editForm = reactive({
   email: '',
   is_disabled: false,
   nickname: '',
-  role: 'user' as 'admin' | 'user',
 });
 const passwordForm = reactive({ password: '' });
 const pointForm = reactive({ delta: 0, reason: '' });
-const enabledCount = computed(
-  () => users.value.filter((item) => !item.is_disabled).length,
-);
-const adminCount = computed(
-  () => users.value.filter((item) => item.role === 'admin').length,
-);
+
+function formatMinuteTime(value?: null | string) {
+  if (!value) return '-';
+  return dayjs(value).format('YYYY-MM-DD HH:mm');
+}
 
 async function fetchUsers() {
   loading.value = true;
@@ -96,21 +95,6 @@ async function toggleDisabled(user: AdminUser) {
   await fetchUsers();
 }
 
-async function toggleRole(user: AdminUser) {
-  try {
-    await confirm({
-      content: `确认将 ${user.username} 切换为 ${user.role === 'admin' ? '普通用户' : '管理员'}？`,
-      icon: 'warning',
-      title: '更新用户角色',
-    });
-  } catch {
-    return;
-  }
-  await updateAdminUser(user.id, { role: user.role === 'admin' ? 'user' : 'admin' });
-  message.success('角色已更新');
-  await fetchUsers();
-}
-
 function openPoint(user: AdminUser) {
   currentUser.value = user;
   pointForm.delta = 0;
@@ -130,7 +114,6 @@ function openEdit(user: AdminUser) {
     email: user.email,
     is_disabled: user.is_disabled,
     nickname: user.nickname || '',
-    role: user.role as 'admin' | 'user',
   });
   editOpen.value = true;
 }
@@ -141,7 +124,6 @@ async function handleEdit() {
     email: editForm.email,
     is_disabled: editForm.is_disabled,
     nickname: editForm.nickname,
-    role: editForm.role,
   });
   message.success('用户资料已更新');
   editOpen.value = false;
@@ -170,12 +152,12 @@ async function handleResetPassword() {
 
 async function handleAdjustPoints() {
   if (!currentUser.value) return;
-  if (!pointForm.delta || !pointForm.reason.trim()) {
-    message.warning('请填写积分变化和原因');
+  if (pointForm.delta <= 0 || !pointForm.reason.trim()) {
+    message.warning('请填写积分增加数量和原因');
     return;
   }
   await adjustUserPoints(currentUser.value.id, pointForm);
-  message.success('积分已调整');
+  message.success('积分已增加');
   pointOpen.value = false;
   await fetchUsers();
 }
@@ -186,35 +168,9 @@ onMounted(fetchUsers);
 <template>
   <Page
     content-class="space-y-4"
-    description="创建账号、调整积分、控制账号状态和用户角色。"
-    title="用户管理"
+    description=""
+    title=""
   >
-    <a-row :gutter="[16, 16]" class="mb-4">
-      <a-col :lg="6" :sm="12" :xs="24">
-        <a-card>
-          <a-statistic title="用户总数" :value="total" />
-        </a-card>
-      </a-col>
-      <a-col :lg="6" :sm="12" :xs="24">
-        <a-card>
-          <a-statistic title="当前页正常账号" :value="enabledCount" />
-        </a-card>
-      </a-col>
-      <a-col :lg="6" :sm="12" :xs="24">
-        <a-card>
-          <a-statistic title="当前页管理员" :value="adminCount" />
-        </a-card>
-      </a-col>
-      <a-col :lg="6" :sm="12" :xs="24">
-        <a-card>
-          <a-statistic
-            title="当前页积分"
-            :value="users.reduce((sum, item) => sum + item.points, 0)"
-          />
-        </a-card>
-      </a-col>
-    </a-row>
-
     <a-card title="用户管理">
       <template #extra>
         <a-space wrap>
@@ -254,8 +210,7 @@ onMounted(fetchUsers);
               <a-button size="small" @click="openDetail(record)">详情</a-button>
               <a-button size="small" @click="openEdit(record)">编辑</a-button>
               <a-button size="small" @click="openResetPassword(record)">重置密码</a-button>
-              <a-button size="small" @click="openPoint(record)">调积分</a-button>
-              <a-button size="small" @click="toggleRole(record)">切换角色</a-button>
+              <a-button size="small" @click="openPoint(record)">增加积分</a-button>
               <a-button size="small" danger @click="toggleDisabled(record)">{{ record.is_disabled ? '启用' : '禁用' }}</a-button>
             </a-space>
           </template>
@@ -269,7 +224,9 @@ onMounted(fetchUsers);
     <a-modal v-model:open="createOpen" title="创建用户" @ok="handleCreate">
       <a-form layout="vertical">
         <a-form-item label="用户名"><a-input v-model:value="form.username" /></a-form-item>
-        <a-form-item label="密码"><a-input-password v-model:value="form.password" /></a-form-item>
+        <a-form-item label="密码">
+          <a-input-password v-model:value="form.password" autocomplete="new-password" />
+        </a-form-item>
         <a-form-item label="邮箱"><a-input v-model:value="form.email" /></a-form-item>
         <a-form-item label="昵称"><a-input v-model:value="form.nickname" /></a-form-item>
         <a-form-item label="初始积分"><a-input-number v-model:value="form.initial_points" class="w-full" :min="0" /></a-form-item>
@@ -281,12 +238,6 @@ onMounted(fetchUsers);
       <a-form layout="vertical">
         <a-form-item label="昵称"><a-input v-model:value="editForm.nickname" /></a-form-item>
         <a-form-item label="邮箱"><a-input v-model:value="editForm.email" /></a-form-item>
-        <a-form-item label="角色">
-          <a-select
-            v-model:value="editForm.role"
-            :options="[{value:'user',label:'普通用户'},{value:'admin',label:'管理员'}]"
-          />
-        </a-form-item>
         <a-form-item label="账号状态">
           <a-switch
             v-model:checked="editForm.is_disabled"
@@ -298,7 +249,7 @@ onMounted(fetchUsers);
     </a-modal>
 
     <a-modal v-model:open="passwordOpen" title="重置密码" @ok="handleResetPassword">
-      <a-form layout="vertical">
+      <a-form autocomplete="off" layout="vertical">
         <a-alert
           v-if="currentUser"
           class="mb-4"
@@ -307,12 +258,17 @@ onMounted(fetchUsers);
           :message="`将重置用户 ${currentUser.username} 的登录密码`"
         />
         <a-form-item label="新密码">
-          <a-input-password v-model:value="passwordForm.password" placeholder="至少 8 位" />
+          <a-input
+            v-model:value="passwordForm.password"
+            autocomplete="off"
+            name="admin-reset-temporary-password"
+            placeholder="至少 8 位"
+          />
         </a-form-item>
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="pointOpen" title="调整积分" @ok="handleAdjustPoints">
+    <a-modal v-model:open="pointOpen" title="增加积分" @ok="handleAdjustPoints">
       <a-form layout="vertical">
         <a-alert
           v-if="currentUser"
@@ -321,7 +277,9 @@ onMounted(fetchUsers);
           type="info"
           :message="`当前用户：${currentUser.username}，当前积分：${currentUser.points}`"
         />
-        <a-form-item label="积分变化"><a-input-number v-model:value="pointForm.delta" class="w-full" /></a-form-item>
+        <a-form-item label="积分增加">
+          <a-input-number v-model:value="pointForm.delta" class="w-full" :min="1" :precision="0" />
+        </a-form-item>
         <a-form-item label="原因"><a-textarea v-model:value="pointForm.reason" /></a-form-item>
       </a-form>
     </a-modal>
@@ -379,6 +337,9 @@ onMounted(fetchUsers);
               <a-tag :color="record.delta >= 0 ? 'green' : 'red'">
                 {{ record.delta >= 0 ? '+' : '' }}{{ record.delta }}
               </a-tag>
+            </template>
+            <template v-if="column.dataIndex === 'created_at'">
+              {{ formatMinuteTime(record.created_at) }}
             </template>
           </template>
           <template #emptyText>

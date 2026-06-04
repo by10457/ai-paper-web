@@ -1,4 +1,4 @@
-import type { PageResult, PointLedger, RechargeOrder } from './ai-paper';
+import type { PageResult, PointLedger } from './ai-paper';
 
 import { requestClient } from '#/api/request';
 
@@ -80,12 +80,9 @@ export interface ModelConfig {
   is_default: boolean;
   is_enabled: boolean;
   masked_api_key: string;
-  max_tokens: number;
   model_name: string;
   provider: string;
   remark?: null | string;
-  temperature: number;
-  timeout_seconds: number;
   updated_at: string;
 }
 
@@ -114,12 +111,6 @@ export interface AuditLog {
   summary: string;
   target_id?: null | string;
   target_type: string;
-}
-
-export interface AdminRechargeOrder extends RechargeOrder {
-  reviewer_id?: null | number;
-  user_id: number;
-  username: string;
 }
 
 export function getAdminOverview() {
@@ -151,7 +142,7 @@ export function createAdminUser(data: {
 
 export function updateAdminUser(
   userId: number,
-  data: Partial<Pick<AdminUser, 'email' | 'is_disabled' | 'nickname' | 'role'>>,
+  data: Partial<Pick<AdminUser, 'email' | 'is_disabled' | 'nickname'>>,
 ) {
   return requestClient.request<AdminUser>(`/admin/users/${userId}`, {
     data,
@@ -168,28 +159,6 @@ export function adjustUserPoints(
   data: { delta: number; reason: string },
 ) {
   return requestClient.post<PointLedger>(`/admin/users/${userId}/points`, data);
-}
-
-export function listAdminRechargeOrders(params: {
-  keyword?: string;
-  page?: number;
-  page_size?: number;
-  status?: string;
-}) {
-  return requestClient.get<PageResult<AdminRechargeOrder>>(
-    '/admin/recharge-orders',
-    { params },
-  );
-}
-
-export function reviewAdminRechargeOrder(
-  orderId: number,
-  data: { admin_remark: string; status: 'approved' | 'rejected' },
-) {
-  return requestClient.post<AdminRechargeOrder>(
-    `/admin/recharge-orders/${orderId}/review`,
-    data,
-  );
 }
 
 export function listAdminOrders(params: {

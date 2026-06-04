@@ -103,20 +103,6 @@ export interface ApiTokenResult extends ApiTokenInfo {
   username: string;
 }
 
-export interface RechargeOrder {
-  admin_remark?: null | string;
-  amount: number;
-  created_at: string;
-  id: number;
-  order_sn: string;
-  pay_channel: string;
-  points: number;
-  remark?: null | string;
-  reviewed_at?: null | string;
-  status: string;
-  status_text: string;
-}
-
 const AI_OUTLINE_TIMEOUT = 180_000;
 
 export function getPaperPrice() {
@@ -180,18 +166,4 @@ export function getApiTokenInfo() {
 
 export function resetApiToken() {
   return requestClient.post<ApiTokenResult>('/users/apiToken/reset');
-}
-
-export function createRechargeOrder(data: {
-  pay_channel: 'alipay' | 'bank' | 'manual' | 'wechat';
-  points: number;
-  remark?: string;
-}) {
-  return requestClient.post<RechargeOrder>('/users/points/recharge', data);
-}
-
-export function listRechargeOrders(page = 1, pageSize = 10) {
-  return requestClient.get<PageResult<RechargeOrder>>('/users/points/recharge', {
-    params: { page, page_size: pageSize },
-  });
 }

@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import type { AuditLog, ModelCallLog, ModelConfig } from '#/api';
+import type { ModelConfig } from '#/api';
 
 import { computed, onMounted, reactive, ref } from 'vue';
 
@@ -10,44 +10,145 @@ import { message } from 'antdv-next';
 import {
   createModelConfig,
   deleteModelConfig,
-  listAuditLogs,
   listModelConfigs,
-  listModelCallLogs,
   testModelConfig,
   updateModelConfig,
 } from '#/api';
 
 const configs = ref<ModelConfig[]>([]);
-const modelLogs = ref<ModelCallLog[]>([]);
-const auditLogs = ref<AuditLog[]>([]);
 const open = ref(false);
 const editing = ref<ModelConfig>();
 const loading = ref(false);
-const logLoading = ref(false);
-const auditLoading = ref(false);
-const modelLogPage = ref(1);
-const modelLogTotal = ref(0);
-const auditPage = ref(1);
-const auditTotal = ref(0);
+const usageOptions = [
+  {
+    description: '用于生成论文结构、大纲说明、摘要、致谢和参考文献检索关键词。',
+    label: '论文大纲与辅助文本',
+    value: 'outline',
+  },
+  {
+    description: '用于根据大纲和参考文献生成论文正文，通常需要更大的上下文和输出长度。',
+    label: '论文正文生成',
+    value: 'fulltext',
+  },
+  {
+    description: '用于生成论文插图、示意图等图片内容。',
+    label: '论文插图生成',
+    value: 'figure',
+  },
+  {
+    description: '当某个文本用途没有单独配置时使用的兜底文本模型。',
+    label: '默认文本模型',
+    value: 'default',
+  },
+] as const;
+const textProtocolOptions = [
+  {
+    description: '适用于支持 Chat Completions / OpenAI 兼容格式的文本模型。',
+    label: 'OpenAI 兼容协议',
+    value: 'openai-compatible',
+  },
+  {
+    description: '适用于 Claude 系列文本模型。',
+    label: 'Anthropic Claude 协议',
+    value: 'anthropic',
+  },
+  {
+    description: '适用于 Gemini generateContent 兼容的文本模型接口。',
+    label: 'Gemini generateContent 协议',
+    value: 'gemini-generate-content',
+  },
+] as const;
+const imageProtocolOptions = [
+  {
+    description: '适用于 Gemini generateContent 兼容的图片生成接口。',
+    label: 'Google generateContent 图片协议',
+    value: 'google-generate-content',
+  },
+] as const;
 const form = reactive<Record<string, any>>({
-  api_base_url: 'https://api.deepseek.com',
+  api_base_url: '',
   api_key: '',
   config_type: 'outline',
   is_default: false,
   is_enabled: true,
-  max_tokens: 4096,
-  model_name: 'deepseek-chat',
-  provider: 'deepseek',
+  model_name: '',
+  provider: 'openai-compatible',
   remark: '',
-  temperature: 0.7,
-  timeout_seconds: 120,
 });
-const enabledCount = computed(
-  () => configs.value.filter((item) => item.is_enabled).length,
+const currentUsage = computed(() =>
+  usageOptions.find((item) => item.value === form.config_type),
 );
-const defaultCount = computed(
-  () => configs.value.filter((item) => item.is_default).length,
+const protocolOptions = computed(() =>
+  {
+    const options =
+      form.config_type === 'figure'
+        ? [...imageProtocolOptions]
+        : [...textProtocolOptions];
+    if (
+      form.provider &&
+      !options.some((item) => item.value === form.provider)
+    ) {
+      return [
+        {
+          description: '已有配置中的自定义协议或服务商标识。',
+          label: `自定义协议：${form.provider}`,
+          value: form.provider,
+        },
+        ...options,
+      ];
+    }
+    return options;
+  },
 );
+
+function getUsageOption(value: string) {
+  return usageOptions.find((item) => item.value === value);
+}
+
+function getUsageLabel(value: string) {
+  return getUsageOption(value)?.label ?? value;
+}
+
+function getUsageDescription(value: string) {
+  return getUsageOption(value)?.description ?? '';
+}
+
+function getProtocolOption(value: string) {
+  return [...textProtocolOptions, ...imageProtocolOptions].find(
+    (item) => item.value === value,
+  );
+}
+
+function getProtocolLabel(value: string) {
+  return getProtocolOption(value)?.label ?? `自定义协议：${value}`;
+}
+
+function getProtocolDescription(value: string) {
+  return getProtocolOption(value)?.description ?? '已有配置中的自定义协议或服务商标识。';
+}
+
+function resetForm() {
+  Object.assign(form, {
+    api_base_url: '',
+    api_key: '',
+    config_type: 'outline',
+    is_default: false,
+    is_enabled: true,
+    model_name: '',
+    provider: 'openai-compatible',
+    remark: '',
+  });
+}
+
+function handleUsageChange(value: string) {
+  if (value === 'figure') {
+    form.provider = 'google-generate-content';
+    return;
+  }
+  if (!textProtocolOptions.some((item) => item.value === form.provider)) {
+    form.provider = 'openai-compatible';
+  }
+}
 
 async function fetchConfigs() {
   loading.value = true;
@@ -58,43 +159,9 @@ async function fetchConfigs() {
   }
 }
 
-async function fetchModelLogs() {
-  logLoading.value = true;
-  try {
-    const res = await listModelCallLogs(modelLogPage.value, 10);
-    modelLogs.value = res.items;
-    modelLogTotal.value = res.total;
-  } finally {
-    logLoading.value = false;
-  }
-}
-
-async function fetchAuditLogs() {
-  auditLoading.value = true;
-  try {
-    const res = await listAuditLogs(auditPage.value, 10);
-    auditLogs.value = res.items;
-    auditTotal.value = res.total;
-  } finally {
-    auditLoading.value = false;
-  }
-}
-
 function openCreate() {
   editing.value = undefined;
-  Object.assign(form, {
-    api_base_url: 'https://api.deepseek.com',
-    api_key: '',
-    config_type: 'outline',
-    is_default: false,
-    is_enabled: true,
-    max_tokens: 4096,
-    model_name: 'deepseek-chat',
-    provider: 'deepseek',
-    remark: '',
-    temperature: 0.7,
-    timeout_seconds: 120,
-  });
+  resetForm();
   open.value = true;
 }
 
@@ -105,8 +172,8 @@ function openEdit(item: ModelConfig) {
 }
 
 async function saveConfig() {
-  if (!form.provider || !form.model_name || !form.api_base_url) {
-    message.warning('请填写供应商、模型名称和 Base URL');
+  if (!form.config_type || !form.provider || !form.model_name || !form.api_base_url) {
+    message.warning('请填写用途、调用协议、模型名称和 Base URL');
     return;
   }
   if (!editing.value && !form.api_key) {
@@ -145,184 +212,107 @@ async function handleTestConfig(item: ModelConfig) {
   message[res.status === 'ok' ? 'success' : 'warning'](res.message);
 }
 
-onMounted(() => {
-  fetchConfigs();
-  fetchModelLogs();
-  fetchAuditLogs();
-});
+onMounted(fetchConfigs);
 </script>
 
 <template>
   <Page
     content-class="space-y-4"
-    description="维护大纲、全文、图表等场景使用的大模型供应商和参数。"
-    title="大模型配置"
+    description=""
+    title=""
   >
-    <a-row :gutter="[16, 16]" class="mb-4">
-      <a-col :lg="6" :sm="12" :xs="24">
-        <a-card>
-          <a-statistic title="配置总数" :value="configs.length" />
-        </a-card>
-      </a-col>
-      <a-col :lg="6" :sm="12" :xs="24">
-        <a-card>
-          <a-statistic title="启用配置" :value="enabledCount" />
-        </a-card>
-      </a-col>
-      <a-col :lg="6" :sm="12" :xs="24">
-        <a-card>
-          <a-statistic title="默认配置" :value="defaultCount" />
-        </a-card>
-      </a-col>
-      <a-col :lg="6" :sm="12" :xs="24">
-        <a-card>
-          <a-statistic
-            title="配置用途"
-            :value="new Set(configs.map((item) => item.config_type)).size"
-          />
-        </a-card>
-      </a-col>
-    </a-row>
-
-    <a-card>
-      <a-tabs>
-        <a-tab-pane key="configs" tab="模型配置">
-          <div class="mb-4 flex justify-between gap-3">
-            <a-alert
-              class="flex-1"
-              show-icon
-              type="info"
-              message="API Key 仅允许写入，查询时只展示脱敏值"
-            />
+    <a-card title="模型配置">
+      <template #extra>
+        <a-space>
+          <a-button :loading="loading" @click="fetchConfigs">刷新</a-button>
+          <a-button type="primary" @click="openCreate">新增配置</a-button>
+        </a-space>
+      </template>
+      <a-alert
+        class="mb-4"
+        show-icon
+        type="info"
+        message="API Key 仅允许写入，查询时只展示脱敏值"
+      />
+      <a-table
+        row-key="id"
+        :columns="[
+          { title: '用途', dataIndex: 'config_type' },
+          { title: '调用协议', dataIndex: 'provider' },
+          { title: '模型', dataIndex: 'model_name' },
+          { title: 'Base URL', dataIndex: 'api_base_url' },
+          { title: 'Key', dataIndex: 'masked_api_key' },
+          { title: '启用', dataIndex: 'is_enabled' },
+          { title: '默认', dataIndex: 'is_default' },
+          { title: '操作', key: 'action', fixed: 'right', width: 220 },
+        ]"
+        :data-source="configs"
+        :loading="loading"
+        :pagination="false"
+        :scroll="{ x: 1280 }"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.dataIndex === 'config_type'">
+            <a-tooltip :title="getUsageDescription(record.config_type)">
+              <a-tag color="blue">{{ getUsageLabel(record.config_type) }}</a-tag>
+            </a-tooltip>
+          </template>
+          <template v-if="column.dataIndex === 'provider'">
+            <a-tooltip :title="getProtocolDescription(record.provider)">
+              <a-tag color="cyan">{{ getProtocolLabel(record.provider) }}</a-tag>
+            </a-tooltip>
+          </template>
+          <template v-if="column.dataIndex === 'is_enabled'">
+            <a-tag :color="record.is_enabled ? 'green' : 'default'">{{ record.is_enabled ? '启用' : '停用' }}</a-tag>
+          </template>
+          <template v-if="column.dataIndex === 'is_default'">
+            <a-tag v-if="record.is_default" color="blue">默认</a-tag>
+            <span v-else>-</span>
+          </template>
+          <template v-if="column.key === 'action'">
             <a-space>
-              <a-button :loading="loading" @click="fetchConfigs">刷新</a-button>
-              <a-button type="primary" @click="openCreate">新增配置</a-button>
+              <a-button size="small" @click="handleTestConfig(record)">测试</a-button>
+              <a-button size="small" @click="openEdit(record)">编辑</a-button>
+              <a-button size="small" danger @click="removeConfig(record)">删除</a-button>
             </a-space>
-          </div>
-          <a-table
-            row-key="id"
-            :columns="[
-              { title: '用途', dataIndex: 'config_type' },
-              { title: '供应商', dataIndex: 'provider' },
-              { title: '模型', dataIndex: 'model_name' },
-              { title: 'Base URL', dataIndex: 'api_base_url' },
-              { title: 'Key', dataIndex: 'masked_api_key' },
-              { title: '温度', dataIndex: 'temperature' },
-              { title: '最大 Token', dataIndex: 'max_tokens' },
-              { title: '启用', dataIndex: 'is_enabled' },
-              { title: '默认', dataIndex: 'is_default' },
-              { title: '操作', key: 'action', fixed: 'right', width: 220 },
-            ]"
-            :data-source="configs"
-            :loading="loading"
-            :pagination="false"
-            :scroll="{ x: 1280 }"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.dataIndex === 'config_type'">
-                <a-tag color="blue">{{ record.config_type }}</a-tag>
-              </template>
-              <template v-if="column.dataIndex === 'is_enabled'">
-                <a-tag :color="record.is_enabled ? 'green' : 'default'">{{ record.is_enabled ? '启用' : '停用' }}</a-tag>
-              </template>
-              <template v-if="column.dataIndex === 'is_default'">
-                <a-tag v-if="record.is_default" color="blue">默认</a-tag>
-                <span v-else>-</span>
-              </template>
-              <template v-if="column.key === 'action'">
-                <a-space>
-                  <a-button size="small" @click="handleTestConfig(record)">测试</a-button>
-                  <a-button size="small" @click="openEdit(record)">编辑</a-button>
-                  <a-button size="small" danger @click="removeConfig(record)">删除</a-button>
-                </a-space>
-              </template>
-            </template>
-            <template #emptyText>
-              <a-empty description="暂无模型配置，请先新增一个可用模型" />
-            </template>
-          </a-table>
-        </a-tab-pane>
-
-        <a-tab-pane key="modelLogs" tab="模型调用日志">
-          <div class="mb-4 text-right">
-            <a-button :loading="logLoading" @click="fetchModelLogs">刷新</a-button>
-          </div>
-          <a-table
-            row-key="id"
-            :columns="[
-              { title: 'ID', dataIndex: 'id', width: 80 },
-              { title: '用途', dataIndex: 'config_type' },
-              { title: '供应商', dataIndex: 'provider' },
-              { title: '模型', dataIndex: 'model_name' },
-              { title: '用户', dataIndex: 'user_id' },
-              { title: '订单', dataIndex: 'order_id' },
-              { title: '输入', dataIndex: 'input_tokens' },
-              { title: '输出', dataIndex: 'output_tokens' },
-              { title: '耗时(ms)', dataIndex: 'latency_ms' },
-              { title: '状态', dataIndex: 'status' },
-              { title: '错误', dataIndex: 'error_message' },
-              { title: '时间', dataIndex: 'created_at' },
-            ]"
-            :data-source="modelLogs"
-            :loading="logLoading"
-            :pagination="{ current: modelLogPage, total: modelLogTotal, pageSize: 10 }"
-            :scroll="{ x: 1300 }"
-            @change="(pagination:any) => { modelLogPage = pagination.current; fetchModelLogs(); }"
-          >
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.dataIndex === 'status'">
-                <a-tag :color="record.status === 'success' ? 'green' : 'red'">
-                  {{ record.status }}
-                </a-tag>
-              </template>
-            </template>
-            <template #emptyText>
-              <a-empty description="暂无模型调用日志" />
-            </template>
-          </a-table>
-        </a-tab-pane>
-
-        <a-tab-pane key="audit" tab="审计日志">
-          <div class="mb-4 text-right">
-            <a-button :loading="auditLoading" @click="fetchAuditLogs">刷新</a-button>
-          </div>
-          <a-table
-            row-key="id"
-            :columns="[
-              { title: 'ID', dataIndex: 'id', width: 80 },
-              { title: '操作人', dataIndex: 'operator_id' },
-              { title: '动作', dataIndex: 'action' },
-              { title: '对象', dataIndex: 'target_type' },
-              { title: '对象 ID', dataIndex: 'target_id' },
-              { title: '摘要', dataIndex: 'summary' },
-              { title: 'IP', dataIndex: 'ip_address' },
-              { title: '时间', dataIndex: 'created_at' },
-            ]"
-            :data-source="auditLogs"
-            :loading="auditLoading"
-            :pagination="{ current: auditPage, total: auditTotal, pageSize: 10 }"
-            :scroll="{ x: 1100 }"
-            @change="(pagination:any) => { auditPage = pagination.current; fetchAuditLogs(); }"
-          >
-            <template #emptyText>
-              <a-empty description="暂无审计日志" />
-            </template>
-          </a-table>
-        </a-tab-pane>
-      </a-tabs>
+          </template>
+        </template>
+        <template #emptyText>
+          <a-empty description="暂无模型配置，请先新增一个可用模型" />
+        </template>
+      </a-table>
     </a-card>
 
     <a-modal v-model:open="open" width="720px" title="模型配置" @ok="saveConfig">
       <a-form layout="vertical">
         <a-row :gutter="12">
-          <a-col :span="12"><a-form-item label="用途"><a-select v-model:value="form.config_type" :options="['outline','fulltext','figure','default'].map(value => ({value}))" /></a-form-item></a-col>
-          <a-col :span="12"><a-form-item label="供应商"><a-input v-model:value="form.provider" /></a-form-item></a-col>
-          <a-col :span="12"><a-form-item label="模型名称"><a-input v-model:value="form.model_name" /></a-form-item></a-col>
-          <a-col :span="12"><a-form-item label="Base URL"><a-input v-model:value="form.api_base_url" /></a-form-item></a-col>
+          <a-col :span="12">
+            <a-form-item label="用途">
+              <a-select
+                v-model:value="form.config_type"
+                :options="usageOptions"
+                @change="handleUsageChange"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item label="调用协议">
+              <a-select
+                v-model:value="form.provider"
+                :options="protocolOptions"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="24">
+            <a-alert
+              :message="currentUsage?.description"
+              show-icon
+              type="info"
+            />
+          </a-col>
+          <a-col :span="12"><a-form-item label="模型名称"><a-input v-model:value="form.model_name" placeholder="例如 gpt-4.1、claude-sonnet、gemini-3-pro-image-preview" /></a-form-item></a-col>
+          <a-col :span="12"><a-form-item label="Base URL"><a-input v-model:value="form.api_base_url" placeholder="填写对应服务商的 API Base URL" /></a-form-item></a-col>
           <a-col :span="24"><a-form-item label="API Key"><a-input-password v-model:value="form.api_key" placeholder="编辑时留空表示不修改" /></a-form-item></a-col>
-          <a-col :span="8"><a-form-item label="温度"><a-input-number v-model:value="form.temperature" class="w-full" :min="0" :max="2" :step="0.1" /></a-form-item></a-col>
-          <a-col :span="8"><a-form-item label="最大 Token"><a-input-number v-model:value="form.max_tokens" class="w-full" :min="1" /></a-form-item></a-col>
-          <a-col :span="8"><a-form-item label="超时秒数"><a-input-number v-model:value="form.timeout_seconds" class="w-full" :min="1" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="启用"><a-switch v-model:checked="form.is_enabled" /></a-form-item></a-col>
           <a-col :span="12"><a-form-item label="默认"><a-switch v-model:checked="form.is_default" /></a-form-item></a-col>
           <a-col :span="24"><a-form-item label="备注"><a-textarea v-model:value="form.remark" /></a-form-item></a-col>

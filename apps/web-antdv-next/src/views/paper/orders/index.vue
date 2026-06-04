@@ -7,7 +7,7 @@ import { Page } from '@vben/common-ui';
 
 import { message } from 'antdv-next';
 
-import { getMyPaperOrderDetail, listMyPaperOrders } from '#/api';
+import { getMyPaperOrderDetail, getPaperPrice, listMyPaperOrders } from '#/api';
 
 const loading = ref(false);
 const orders = ref<PaperOrderItem[]>([]);
@@ -15,6 +15,7 @@ const total = ref(0);
 const page = ref(1);
 const detail = ref<any>(null);
 const detailOpen = ref(false);
+const userPoints = ref(0);
 const statusColorMap: Record<string, string> = {
   completed: 'green',
   created: 'default',
@@ -35,9 +36,13 @@ const statusTextMap: Record<string, string> = {
 async function fetchOrders() {
   loading.value = true;
   try {
-    const res = await listMyPaperOrders(page.value, 10);
+    const [res, price] = await Promise.all([
+      listMyPaperOrders(page.value, 10),
+      getPaperPrice(),
+    ]);
     orders.value = res.items;
     total.value = res.total;
+    userPoints.value = price.user_points;
   } finally {
     loading.value = false;
   }
@@ -66,30 +71,27 @@ onMounted(fetchOrders);
     <a-row :gutter="[16, 16]" class="mb-4">
       <a-col :lg="6" :sm="12" :xs="24">
         <a-card>
+          <a-statistic title="当前积分" :value="userPoints" />
+        </a-card>
+      </a-col>
+      <a-col :lg="6" :sm="12" :xs="24">
+        <a-card>
           <a-statistic title="订单总数" :value="total" />
         </a-card>
       </a-col>
       <a-col :lg="6" :sm="12" :xs="24">
         <a-card>
           <a-statistic
-            title="已完成"
-            :value="orders.filter((item) => item.status === 'completed').length"
+            title="当前页已扣"
+            :value="orders.reduce((sum, item) => sum + item.paid_points, 0)"
           />
         </a-card>
       </a-col>
       <a-col :lg="6" :sm="12" :xs="24">
         <a-card>
           <a-statistic
-            title="生成中"
-            :value="orders.filter((item) => ['paid', 'generating'].includes(item.status)).length"
-          />
-        </a-card>
-      </a-col>
-      <a-col :lg="6" :sm="12" :xs="24">
-        <a-card>
-          <a-statistic
-            title="失败订单"
-            :value="orders.filter((item) => item.status === 'failed').length"
+            title="当前页退回"
+            :value="orders.reduce((sum, item) => sum + item.refunded_points, 0)"
           />
         </a-card>
       </a-col>

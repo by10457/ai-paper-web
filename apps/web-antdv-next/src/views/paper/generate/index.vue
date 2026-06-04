@@ -219,7 +219,7 @@ async function confirmGeneratePaper() {
   try {
     price.value = await getPaperPrice();
     if (price.value.user_points < price.value.points) {
-      message.warning('积分余额不足，请先充值或联系管理员');
+      message.warning('积分余额不足，请联系管理员增加积分');
       return;
     }
     try {

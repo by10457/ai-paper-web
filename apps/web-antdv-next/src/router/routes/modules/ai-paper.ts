@@ -16,7 +16,7 @@ const routes: RouteRecordRaw[] = [
       affixTab: true,
       icon: 'lucide:sparkles',
       order: -13,
-      title: 'AI 论文生成',
+      title: 'AI 论文',
     },
     name: 'PaperGenerate',
     path: '/paper/generate',
@@ -32,20 +32,10 @@ const routes: RouteRecordRaw[] = [
     path: '/paper/orders',
   },
   {
-    component: () => import('#/views/paper/points/index.vue'),
-    meta: {
-      icon: 'lucide:coins',
-      order: -11,
-      title: '积分与 Token',
-    },
-    name: 'PaperPoints',
-    path: '/paper/points',
-  },
-  {
     component: () => import('#/views/paper/docs/index.vue'),
     meta: {
       icon: 'lucide:book-open',
-      order: -10,
+      order: -11,
       title: '使用文档',
     },
     name: 'PaperDocs',
@@ -90,16 +80,6 @@ const routes: RouteRecordRaw[] = [
         },
         name: 'AdminOrders',
         path: '/admin/orders',
-      },
-      {
-        component: () => import('#/views/admin/recharges/index.vue'),
-        meta: {
-          authority: ['admin'],
-          icon: 'lucide:badge-dollar-sign',
-          title: '充值审核',
-        },
-        name: 'AdminRecharges',
-        path: '/admin/recharges',
       },
       {
         component: () => import('#/views/admin/model-configs/index.vue'),

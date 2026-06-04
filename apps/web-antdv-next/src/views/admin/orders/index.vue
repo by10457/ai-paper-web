@@ -51,7 +51,7 @@ const failedCount = computed(
   () => orders.value.filter((item) => item.status === 'failed').length,
 );
 const runningCount = computed(
-  () => orders.value.filter((item) => ['paid', 'generating'].includes(item.status)).length,
+  () => orders.value.filter((item) => ['generating', 'paid'].includes(item.status)).length,
 );
 
 async function fetchOrders() {
@@ -159,8 +159,8 @@ onMounted(fetchOrders);
 <template>
   <Page
     content-class="space-y-4"
-    description="检索全量订单，处理生成失败、补发文件和积分退款。"
-    title="订单任务"
+    description=""
+    title=""
   >
     <a-row :gutter="[16, 16]" class="mb-4">
       <a-col :lg="6" :sm="12" :xs="24">
