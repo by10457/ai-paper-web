@@ -8,7 +8,6 @@ import '@vben/styles';
 import '@vben/styles/antdv-next';
 
 import { useTitle } from '@vueuse/core';
-
 import Antd from 'antdv-next';
 
 import { $t, setupI18n } from '#/locales';

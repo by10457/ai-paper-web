@@ -37,6 +37,7 @@ export async function loginApi(data: AuthApi.LoginParams) {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
+      skipReAuthenticate: true,
     },
   );
   return {
