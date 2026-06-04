@@ -55,6 +55,12 @@ export interface PaperOrderStatus {
   task_id?: null | string;
 }
 
+export interface PaperOrderDownloadUrl {
+  download_url: string;
+  file_key?: null | string;
+  order_sn: string;
+}
+
 export interface PaperOrderItem {
   completed_at?: null | string;
   cost_points: number;
@@ -150,6 +156,12 @@ export function listMyPaperOrders(page = 1, pageSize = 10) {
 
 export function getMyPaperOrderDetail(order_sn: string) {
   return requestClient.get<PaperOrderDetail>('/thesis/orders/detail', {
+    params: { order_sn },
+  });
+}
+
+export function getPaperOrderDownloadUrl(order_sn: string) {
+  return requestClient.get<PaperOrderDownloadUrl>('/thesis/orders/download-url', {
     params: { order_sn },
   });
 }

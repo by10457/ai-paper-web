@@ -16,6 +16,7 @@ import { message } from 'antdv-next';
 import {
   createPaperOrder,
   createPaperOutline,
+  getPaperOrderDownloadUrl,
   getPaperOrderStatus,
   getPaperPrice,
   payPaperOrder,
@@ -26,6 +27,8 @@ type WorkflowStep = 'config' | 'outline' | 'result';
 const outlineLoading = ref(false);
 const submitLoading = ref(false);
 const statusLoading = ref(false);
+const downloadLoading = ref(false);
+const copyLoading = ref(false);
 const step = ref<WorkflowStep>('config');
 const price = ref<null | PaperPrice>(null);
 const outlineRecordId = ref<number>();
@@ -89,6 +92,7 @@ const statusText = computed(() => {
   if (!status.value) return '等待生成';
   return statusTextMap[status.value.status] || status.value.status;
 });
+const canDownloadPaper = computed(() => status.value?.status === 'completed' && status.value?.has_file === 1);
 const progressPercent = computed(() => {
   if (!status.value) return 20;
   if (status.value.status === 'completed') return 100;
@@ -275,10 +279,33 @@ function backToOutline() {
   step.value = 'outline';
 }
 
-function copyDownloadUrl() {
-  if (!status.value?.download_url) return;
-  navigator.clipboard?.writeText(status.value.download_url);
-  message.success('下载链接已复制');
+async function resolveDownloadUrl() {
+  if (!order.value?.order_sn) return '';
+  const result = await getPaperOrderDownloadUrl(order.value.order_sn);
+  return result.download_url;
+}
+
+async function copyDownloadUrl() {
+  copyLoading.value = true;
+  try {
+    const url = await resolveDownloadUrl();
+    if (!url) return;
+    await navigator.clipboard?.writeText(url);
+    message.success('下载链接已复制');
+  } finally {
+    copyLoading.value = false;
+  }
+}
+
+async function downloadPaper() {
+  downloadLoading.value = true;
+  try {
+    const url = await resolveDownloadUrl();
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } finally {
+    downloadLoading.value = false;
+  }
 }
 
 onUnmounted(stopPolling);
@@ -484,15 +511,16 @@ onUnmounted(stopPolling);
                 刷新状态
               </a-button>
               <a-button
-                v-if="status?.download_url"
+                v-if="canDownloadPaper"
                 type="primary"
-                :href="status.download_url"
-                target="_blank"
+                :loading="downloadLoading"
+                @click="downloadPaper"
               >
                 下载论文
               </a-button>
               <a-button
-                v-if="status?.download_url"
+                v-if="canDownloadPaper"
+                :loading="copyLoading"
                 @click="copyDownloadUrl"
               >
                 复制链接
@@ -527,9 +555,23 @@ onUnmounted(stopPolling);
             {{ order?.points || price?.points || '-' }}
           </a-descriptions-item>
           <a-descriptions-item label="下载链接">
-            <a-typography-text v-if="status?.download_url" copyable>
-              {{ status.download_url }}
-            </a-typography-text>
+            <a-space v-if="canDownloadPaper">
+              <a-button
+                size="small"
+                type="primary"
+                :loading="downloadLoading"
+                @click="downloadPaper"
+              >
+                下载
+              </a-button>
+              <a-button
+                size="small"
+                :loading="copyLoading"
+                @click="copyDownloadUrl"
+              >
+                复制
+              </a-button>
+            </a-space>
             <span v-else>-</span>
           </a-descriptions-item>
           <a-descriptions-item label="错误信息">

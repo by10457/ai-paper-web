@@ -11,7 +11,6 @@ import {
   createModelConfig,
   deleteModelConfig,
   listModelConfigs,
-  testModelConfig,
   updateModelConfig,
 } from '#/api';
 
@@ -21,8 +20,8 @@ const editing = ref<ModelConfig>();
 const loading = ref(false);
 const usageOptions = [
   {
-    description: '用于生成论文结构、大纲说明、摘要、致谢和参考文献检索关键词。',
-    label: '论文大纲与辅助文本',
+    description: '用于生成论文大纲、中英文摘要、致谢和参考文献检索关键词。',
+    label: '论文大纲、摘要与检索词',
     value: 'outline',
   },
   {
@@ -207,11 +206,6 @@ async function removeConfig(item: ModelConfig) {
   await fetchConfigs();
 }
 
-async function handleTestConfig(item: ModelConfig) {
-  const res = await testModelConfig(item.id);
-  message[res.status === 'ok' ? 'success' : 'warning'](res.message);
-}
-
 onMounted(fetchConfigs);
 </script>
 
@@ -244,7 +238,7 @@ onMounted(fetchConfigs);
           { title: 'Key', dataIndex: 'masked_api_key' },
           { title: '启用', dataIndex: 'is_enabled' },
           { title: '默认', dataIndex: 'is_default' },
-          { title: '操作', key: 'action', fixed: 'right', width: 220 },
+          { title: '操作', key: 'action', fixed: 'right', width: 150 },
         ]"
         :data-source="configs"
         :loading="loading"
@@ -271,7 +265,6 @@ onMounted(fetchConfigs);
           </template>
           <template v-if="column.key === 'action'">
             <a-space>
-              <a-button size="small" @click="handleTestConfig(record)">测试</a-button>
               <a-button size="small" @click="openEdit(record)">编辑</a-button>
               <a-button size="small" danger @click="removeConfig(record)">删除</a-button>
             </a-space>

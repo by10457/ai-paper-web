@@ -213,12 +213,6 @@ export function deleteModelConfig(id: number) {
   return requestClient.delete(`/admin/model-configs/${id}`);
 }
 
-export function testModelConfig(id: number) {
-  return requestClient.post<{ message: string; status: string }>(
-    `/admin/model-configs/${id}/test`,
-  );
-}
-
 export function listModelCallLogs(page = 1, pageSize = 10) {
   return requestClient.get<PageResult<ModelCallLog>>('/admin/model-call-logs', {
     params: { page, page_size: pageSize },

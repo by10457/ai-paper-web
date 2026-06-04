@@ -6,8 +6,14 @@ import { onMounted, ref } from 'vue';
 import { Page } from '@vben/common-ui';
 
 import { message } from 'antdv-next';
+import dayjs from 'dayjs';
 
-import { getMyPaperOrderDetail, getPaperPrice, listMyPaperOrders } from '#/api';
+import {
+  getMyPaperOrderDetail,
+  getPaperOrderDownloadUrl,
+  getPaperPrice,
+  listMyPaperOrders,
+} from '#/api';
 
 const loading = ref(false);
 const orders = ref<PaperOrderItem[]>([]);
@@ -16,6 +22,8 @@ const page = ref(1);
 const detail = ref<any>(null);
 const detailOpen = ref(false);
 const userPoints = ref(0);
+const downloadLoadingKey = ref('');
+const copyLoadingKey = ref('');
 const statusColorMap: Record<string, string> = {
   completed: 'green',
   created: 'default',
@@ -53,10 +61,55 @@ async function openDetail(order: PaperOrderItem) {
   detailOpen.value = true;
 }
 
-function copyUrl(url?: null | string) {
-  if (!url) return;
-  navigator.clipboard?.writeText(url);
-  message.success('下载链接已复制');
+function formatMinuteTime(value?: null | string) {
+  if (!value) return '-';
+  return dayjs(value).format('YYYY-MM-DD HH:mm');
+}
+
+async function resolveDownloadUrl(orderSn: string) {
+  const result = await getPaperOrderDownloadUrl(orderSn);
+  return result.download_url;
+}
+
+async function copyDownloadUrl(orderSn: string) {
+  copyLoadingKey.value = orderSn;
+  try {
+    const url = await resolveDownloadUrl(orderSn);
+    if (!url) return;
+    await navigator.clipboard?.writeText(url);
+    message.success('下载链接已复制');
+  } finally {
+    copyLoadingKey.value = '';
+  }
+}
+
+async function downloadPaper(orderSn: string) {
+  downloadLoadingKey.value = orderSn;
+  try {
+    const url = await resolveDownloadUrl(orderSn);
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } finally {
+    downloadLoadingKey.value = '';
+  }
+}
+
+function hasDownloadFile(order: PaperOrderItem) {
+  return order.status === 'completed' && order.has_file === 1;
+}
+
+async function copyDetailDownloadUrl() {
+  if (!detail.value?.order_sn) return;
+  await copyDownloadUrl(detail.value.order_sn);
+}
+
+async function downloadDetailPaper() {
+  if (!detail.value?.order_sn) return;
+  await downloadPaper(detail.value.order_sn);
+}
+
+function hasDetailDownloadFile() {
+  return detail.value?.status === 'completed' && detail.value?.has_file === 1;
 }
 
 onMounted(fetchOrders);
@@ -65,8 +118,8 @@ onMounted(fetchOrders);
 <template>
   <Page
     content-class="space-y-4"
-    description="查看论文生成订单、任务状态、下载链接和失败原因。"
-    title="我的订单"
+    description=""
+    title=""
   >
     <a-row :gutter="[16, 16]" class="mb-4">
       <a-col :lg="6" :sm="12" :xs="24">
@@ -124,10 +177,32 @@ onMounted(fetchOrders);
               {{ statusTextMap[record.status] || record.status }}
             </a-tag>
           </template>
+          <template v-if="column.dataIndex === 'created_at'">
+            {{ formatMinuteTime(record.created_at) }}
+          </template>
+          <template v-if="column.dataIndex === 'completed_at'">
+            {{ formatMinuteTime(record.completed_at) }}
+          </template>
           <template v-if="column.key === 'action'">
             <a-space>
               <a-button size="small" @click="openDetail(record)">详情</a-button>
-              <a-button v-if="record.download_url" size="small" type="primary" @click="copyUrl(record.download_url)">复制下载</a-button>
+              <a-button
+                v-if="hasDownloadFile(record)"
+                size="small"
+                type="primary"
+                :loading="downloadLoadingKey === record.order_sn"
+                @click="downloadPaper(record.order_sn)"
+              >
+                下载
+              </a-button>
+              <a-button
+                v-if="hasDownloadFile(record)"
+                size="small"
+                :loading="copyLoadingKey === record.order_sn"
+                @click="copyDownloadUrl(record.order_sn)"
+              >
+                复制
+              </a-button>
             </a-space>
           </template>
         </template>
@@ -150,9 +225,22 @@ onMounted(fetchOrders);
         <a-descriptions-item label="退回积分">{{ detail.refunded_points }}</a-descriptions-item>
         <a-descriptions-item label="任务 ID">{{ detail.task_id || '-' }}</a-descriptions-item>
         <a-descriptions-item label="下载链接">
-          <a-space v-if="detail.download_url">
-            <a-typography-text copyable>{{ detail.download_url }}</a-typography-text>
-            <a-button size="small" type="link" @click="copyUrl(detail.download_url)">复制</a-button>
+          <a-space v-if="hasDetailDownloadFile()">
+            <a-button
+              size="small"
+              type="primary"
+              :loading="downloadLoadingKey === detail.order_sn"
+              @click="downloadDetailPaper"
+            >
+              下载
+            </a-button>
+            <a-button
+              size="small"
+              :loading="copyLoadingKey === detail.order_sn"
+              @click="copyDetailDownloadUrl"
+            >
+              复制
+            </a-button>
           </a-space>
           <span v-else>-</span>
         </a-descriptions-item>
