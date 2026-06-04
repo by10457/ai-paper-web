@@ -1,11 +1,13 @@
 <script lang="ts" setup>
 import type {
+  GenerateFormState,
   PaperOrderCreateResult,
   PaperOrderStatus,
   PaperOutlineChapter,
   PaperOutlineSection,
   PaperPrice,
-} from '#/api';
+  WorkflowStep,
+} from './components/types';
 
 import { computed, onUnmounted, reactive, ref } from 'vue';
 
@@ -22,7 +24,12 @@ import {
   payPaperOrder,
 } from '#/api';
 
-type WorkflowStep = 'config' | 'outline' | 'result';
+import BasicInfoStep from './components/BasicInfoStep.vue';
+import GenerationStatusStep from './components/GenerationStatusStep.vue';
+import OutlineEditorStep from './components/OutlineEditorStep.vue';
+
+const OUTLINE_PROGRESS_DURATION = 20_000;
+const PAPER_PROGRESS_DURATION = 5 * 60_000;
 
 const outlineLoading = ref(false);
 const submitLoading = ref(false);
@@ -37,10 +44,14 @@ const outlineAbstract = ref('');
 const outlineKeywords = ref('');
 const order = ref<null | PaperOrderCreateResult>(null);
 const status = ref<null | PaperOrderStatus>(null);
+const outlineProgress = ref(0);
+const paperProgress = ref(0);
 
+let outlineProgressTimer: null | ReturnType<typeof setInterval> = null;
+let paperProgressTimer: null | ReturnType<typeof setInterval> = null;
 let pollTimer: null | ReturnType<typeof setInterval> = null;
 
-const form = reactive({
+const form = reactive<GenerateFormState>({
   about_msg: '',
   codetype: '否',
   language: '否',
@@ -66,14 +77,7 @@ const stepIndexMap: Record<WorkflowStep, number> = {
   result: 2,
 };
 
-const statusColorMap: Record<string, string> = {
-  completed: 'green',
-  created: 'default',
-  failed: 'red',
-  generating: 'blue',
-  paid: 'cyan',
-  refunded: 'orange',
-};
+const workflowTips = ['大纲规划', '结构编辑', '正文生成'];
 
 const statusTextMap: Record<string, string> = {
   completed: '已完成',
@@ -92,24 +96,64 @@ const statusText = computed(() => {
   if (!status.value) return '等待生成';
   return statusTextMap[status.value.status] || status.value.status;
 });
-const canDownloadPaper = computed(() => status.value?.status === 'completed' && status.value?.has_file === 1);
-const progressPercent = computed(() => {
-  if (!status.value) return 20;
-  if (status.value.status === 'completed') return 100;
-  if (status.value.status === 'failed') return 100;
-  if (status.value.status === 'generating') return 75;
-  if (status.value.status === 'paid') return 45;
-  return 20;
-});
-const progressStatus = computed(() => {
-  if (status.value?.status === 'completed') return 'success';
-  if (status.value?.status === 'failed') return 'exception';
-  return 'active';
-});
+const canDownloadPaper = computed(
+  () => status.value?.status === 'completed' && status.value?.has_file === 1,
+);
+
+function clearTimer(timer: null | ReturnType<typeof setInterval>) {
+  if (timer) clearInterval(timer);
+}
+
+function startProgress(
+  progressRef: typeof outlineProgress,
+  duration: number,
+  timerSetter: (timer: null | ReturnType<typeof setInterval>) => void,
+) {
+  timerSetter(null);
+  progressRef.value = Math.max(progressRef.value, 3);
+  const startedAt = Date.now();
+  const interval = duration <= OUTLINE_PROGRESS_DURATION ? 600 : 2500;
+  const timer = setInterval(() => {
+    const elapsedRatio = Math.min((Date.now() - startedAt) / duration, 0.985);
+    const timeBased = Math.floor(elapsedRatio * 92) + 4;
+    const drift = Math.floor(Math.random() * 4);
+    const nextValue = Math.max(
+      progressRef.value + (Math.random() > 0.45 ? 1 : 0),
+      timeBased + drift,
+    );
+    progressRef.value = Math.min(99, nextValue);
+  }, interval);
+  timerSetter(timer);
+}
+
+function startOutlineProgress() {
+  clearTimer(outlineProgressTimer);
+  startProgress(outlineProgress, OUTLINE_PROGRESS_DURATION, (timer) => {
+    outlineProgressTimer = timer;
+  });
+}
+
+function stopOutlineProgress(completed: boolean) {
+  clearTimer(outlineProgressTimer);
+  outlineProgressTimer = null;
+  outlineProgress.value = completed ? 100 : 0;
+}
+
+function startPaperProgress() {
+  clearTimer(paperProgressTimer);
+  startProgress(paperProgress, PAPER_PROGRESS_DURATION, (timer) => {
+    paperProgressTimer = timer;
+  });
+}
+
+function stopPaperProgress(completed: boolean) {
+  clearTimer(paperProgressTimer);
+  paperProgressTimer = null;
+  paperProgress.value = completed ? 100 : Math.max(paperProgress.value, 99);
+}
 
 function stopPolling() {
-  if (!pollTimer) return;
-  clearInterval(pollTimer);
+  clearTimer(pollTimer);
   pollTimer = null;
 }
 
@@ -126,8 +170,15 @@ function startPolling() {
 
 function resetResultState() {
   stopPolling();
+  clearTimer(paperProgressTimer);
+  paperProgressTimer = null;
+  paperProgress.value = 0;
   order.value = null;
   status.value = null;
+}
+
+function updateForm(patch: Partial<GenerateFormState>) {
+  Object.assign(form, patch);
 }
 
 function validateConfig() {
@@ -140,6 +191,14 @@ function validateConfig() {
     return false;
   }
   return true;
+}
+
+function getWorkflowTipClass(index: number) {
+  return {
+    'workflow-tip--active': currentStep.value === index,
+    'workflow-tip--done': currentStep.value > index,
+    'workflow-tip--pending': currentStep.value < index,
+  };
 }
 
 function createBlankSection(): PaperOutlineSection {
@@ -192,6 +251,7 @@ function validateOutline() {
 async function generateOutline() {
   if (!validateConfig()) return;
   outlineLoading.value = true;
+  startOutlineProgress();
   try {
     const result = await createPaperOutline({
       about_msg: form.about_msg.trim(),
@@ -210,8 +270,12 @@ async function generateOutline() {
     outlineAbstract.value = result.abstract;
     outlineKeywords.value = result.keywords;
     resetResultState();
+    stopOutlineProgress(true);
     step.value = 'outline';
     message.success(`大纲生成成功，共 ${result.outline.length} 个章节`);
+  } catch (error) {
+    stopOutlineProgress(false);
+    throw error;
   } finally {
     outlineLoading.value = false;
   }
@@ -243,8 +307,16 @@ async function confirmGeneratePaper() {
     order.value = createdOrder;
     await payPaperOrder(createdOrder.order_sn);
     status.value = await getPaperOrderStatus(createdOrder.order_sn);
+    paperProgress.value = 4;
     step.value = 'result';
-    if (shouldPoll(status.value)) startPolling();
+    if (status.value.status === 'completed') {
+      stopPaperProgress(true);
+    } else if (status.value.status === 'failed') {
+      stopPaperProgress(false);
+    } else {
+      startPaperProgress();
+      if (shouldPoll(status.value)) startPolling();
+    }
     message.success('论文已提交生成，页面将自动刷新结果');
   } finally {
     submitLoading.value = false;
@@ -260,10 +332,15 @@ async function refreshStatus(silent = false) {
   try {
     const result = await getPaperOrderStatus(order.value.order_sn);
     status.value = result;
-    if (shouldPoll(result)) {
-      if (!pollTimer) startPolling();
-    } else {
+    if (result.status === 'completed') {
       stopPolling();
+      stopPaperProgress(true);
+    } else if (result.status === 'failed') {
+      stopPolling();
+      stopPaperProgress(false);
+    } else if (shouldPoll(result)) {
+      if (!paperProgressTimer) startPaperProgress();
+      if (!pollTimer) startPolling();
     }
     if (!silent) message.success('状态已刷新');
   } finally {
@@ -308,397 +385,261 @@ async function downloadPaper() {
   }
 }
 
-onUnmounted(stopPolling);
+onUnmounted(() => {
+  stopPolling();
+  clearTimer(outlineProgressTimer);
+  clearTimer(paperProgressTimer);
+});
 </script>
 
 <template>
   <Page content-class="paper-generate-page">
-    <a-card class="generate-card" title="AI 论文生成">
-      <a-steps class="workflow-steps" :current="currentStep">
-        <a-step title="配置生成大纲" />
-        <a-step title="编辑确认大纲" />
-        <a-step title="查看生成结果" />
-      </a-steps>
-
-      <a-form v-if="step === 'config'" layout="vertical">
-        <a-form-item label="论文题目" required>
-          <a-input
-            v-model:value="form.title"
-            size="large"
-            placeholder="例如：基于深度学习的图像识别技术研究"
-          />
-        </a-form-item>
-
-        <a-row :gutter="[16, 0]">
-          <a-col :lg="8" :sm="12" :xs="24">
-            <a-form-item label="目标字数">
-              <a-input-number
-                v-model:value="form.target_word_count"
-                class="number-input"
-                :min="3000"
-                :step="1000"
-              />
-            </a-form-item>
-          </a-col>
-          <a-col :lg="8" :sm="12" :xs="24">
-            <a-form-item label="参考文献数量">
-              <a-input-number
-                v-model:value="form.wxnum"
-                class="number-input"
-                :max="80"
-                :min="5"
-              />
-            </a-form-item>
-          </a-col>
-          <a-col :lg="8" :sm="12" :xs="24">
-            <a-form-item label="代码语言">
-              <a-select
-                v-model:value="form.codetype"
-                :options="codeTypeOptions"
-              />
-            </a-form-item>
-          </a-col>
-          <a-col :lg="8" :sm="12" :xs="24">
-            <a-form-item label="文献标注">
-              <a-select
-                v-model:value="form.wxquote"
-                :options="quoteOptions"
-              />
-            </a-form-item>
-          </a-col>
-          <a-col :lg="8" :sm="12" :xs="24">
-            <a-form-item label="外文文献">
-              <a-select
-                v-model:value="form.language"
-                :options="yesNoOptions"
-              />
-            </a-form-item>
-          </a-col>
-          <a-col :lg="8" :sm="12" :xs="24">
-            <a-form-item label="三级大纲">
-              <a-switch v-model:checked="form.three_level" />
-            </a-form-item>
-          </a-col>
-        </a-row>
-
-        <a-form-item label="写作方向补充">
-          <a-textarea
-            v-model:value="form.about_msg"
-            :rows="4"
-            placeholder="可填写研究对象、技术路线、学校格式要求等"
-          />
-        </a-form-item>
-
-        <div class="form-actions">
-          <a-button
-            size="large"
-            type="primary"
-            :loading="outlineLoading"
-            @click="generateOutline"
+    <div class="workflow-shell">
+      <header class="workflow-header">
+        <div class="header-meta">
+          <span
+            v-for="(item, index) in workflowTips"
+            :key="item"
+            class="workflow-tip"
+            :class="getWorkflowTipClass(index)"
           >
-            {{ outlineLoading ? 'AI 正在生成大纲...' : '生成免费大纲' }}
-          </a-button>
+            <i>{{ index + 1 }}</i>
+            {{ item }}
+          </span>
         </div>
-      </a-form>
+      </header>
 
-      <div v-else-if="step === 'outline'" class="outline-editor">
-        <a-alert
-          v-if="outlineAbstract || outlineKeywords"
-          class="mb-4"
-          show-icon
-          type="info"
-        >
-          <template #message>
-            {{ outlineKeywords ? `关键词：${outlineKeywords}` : '大纲摘要' }}
-          </template>
-          <template #description>
-            {{ outlineAbstract || '可继续调整大纲后生成论文。' }}
-          </template>
-        </a-alert>
+      <section class="workflow-board">
+        <a-steps class="workflow-steps" :current="currentStep" responsive>
+          <a-step title="填写基本信息生成大纲" />
+          <a-step title="编辑大纲" />
+          <a-step title="论文生成情况" />
+        </a-steps>
 
-        <a-descriptions class="mb-4" :column="2" bordered size="small">
-          <a-descriptions-item label="大纲记录">
-            {{ outlineRecordId }}
-          </a-descriptions-item>
-          <a-descriptions-item label="章节/小节">
-            {{ outline.length }} / {{ outlineSectionCount }}
-          </a-descriptions-item>
-        </a-descriptions>
-
-        <div class="outline-list">
-          <div
-            v-for="(chapter, chapterIndex) in outline"
-            :key="chapterIndex"
-            class="outline-item"
-          >
-            <div class="outline-item__header">
-              <a-input
-                v-model:value="chapter.chapter"
-                class="outline-title-input"
-                :placeholder="`第 ${chapterIndex + 1} 章标题`"
-              />
-              <a-space>
-                <a-button size="small" @click="addSection(chapter)">
-                  添加小节
-                </a-button>
-                <a-button
-                  danger
-                  size="small"
-                  :disabled="outline.length <= 1"
-                  @click="removeChapter(chapterIndex)"
-                >
-                  删除章节
-                </a-button>
-              </a-space>
-            </div>
-
-            <div
-              v-for="(section, sectionIndex) in chapter.sections"
-              :key="sectionIndex"
-              class="section-item"
-            >
-              <div class="section-item__title">
-                <a-input
-                  v-model:value="section.name"
-                  :placeholder="`${chapterIndex + 1}.${sectionIndex + 1} 小节标题`"
-                />
-                <a-button
-                  danger
-                  size="small"
-                  :disabled="chapter.sections.length <= 1"
-                  @click="removeSection(chapter, sectionIndex)"
-                >
-                  删除
-                </a-button>
-              </div>
-              <a-textarea
-                v-model:value="section.abstract"
-                :rows="2"
-                placeholder="本节写作要点"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="form-actions">
-          <a-space wrap>
-            <a-button @click="backToConfig">返回修改配置</a-button>
-            <a-button @click="addChapter">添加章节</a-button>
-            <a-button
-              size="large"
-              type="primary"
-              :loading="submitLoading"
-              @click="confirmGeneratePaper"
-            >
-              确认生成论文
-            </a-button>
-          </a-space>
-        </div>
-      </div>
-
-      <div v-else class="result-panel">
-        <a-result
-          :status="status?.status === 'completed' ? 'success' : status?.status === 'failed' ? 'error' : 'info'"
-          :title="statusText"
-          :sub-title="order?.order_sn ? `订单号：${order.order_sn}` : undefined"
-        >
-          <template #extra>
-            <a-space wrap>
-              <a-button
-                :loading="statusLoading"
-                @click="() => refreshStatus()"
-              >
-                刷新状态
-              </a-button>
-              <a-button
-                v-if="canDownloadPaper"
-                type="primary"
-                :loading="downloadLoading"
-                @click="downloadPaper"
-              >
-                下载论文
-              </a-button>
-              <a-button
-                v-if="canDownloadPaper"
-                :loading="copyLoading"
-                @click="copyDownloadUrl"
-              >
-                复制链接
-              </a-button>
-              <a-button
-                v-if="status?.status === 'failed'"
-                type="primary"
-                @click="backToOutline"
-              >
-                返回大纲
-              </a-button>
-            </a-space>
-          </template>
-        </a-result>
-
-        <a-progress
-          :percent="progressPercent"
-          :show-info="false"
-          :status="progressStatus"
+        <BasicInfoStep
+          v-if="step === 'config'"
+          :code-type-options="codeTypeOptions"
+          :form="form"
+          :loading="outlineLoading"
+          :progress="outlineProgress"
+          :quote-options="quoteOptions"
+          :yes-no-options="yesNoOptions"
+          @change="updateForm"
+          @generate="generateOutline"
         />
 
-        <a-descriptions class="mt-4" :column="1" bordered size="small">
-          <a-descriptions-item label="状态">
-            <a-tag :color="statusColorMap[status?.status || ''] || 'default'">
-              {{ statusText }}
-            </a-tag>
-          </a-descriptions-item>
-          <a-descriptions-item label="任务 ID">
-            {{ status?.task_id || '-' }}
-          </a-descriptions-item>
-          <a-descriptions-item label="扣费积分">
-            {{ order?.points || price?.points || '-' }}
-          </a-descriptions-item>
-          <a-descriptions-item label="下载链接">
-            <a-space v-if="canDownloadPaper">
-              <a-button
-                size="small"
-                type="primary"
-                :loading="downloadLoading"
-                @click="downloadPaper"
-              >
-                下载
-              </a-button>
-              <a-button
-                size="small"
-                :loading="copyLoading"
-                @click="copyDownloadUrl"
-              >
-                复制
-              </a-button>
-            </a-space>
-            <span v-else>-</span>
-          </a-descriptions-item>
-          <a-descriptions-item label="错误信息">
-            {{ status?.error_msg || '-' }}
-          </a-descriptions-item>
-        </a-descriptions>
-      </div>
-    </a-card>
+        <OutlineEditorStep
+          v-else-if="step === 'outline'"
+          :abstract-text="outlineAbstract"
+          :chapter-count="outline.length"
+          :keywords="outlineKeywords"
+          :loading="submitLoading"
+          :outline="outline"
+          :outline-record-id="outlineRecordId"
+          :section-count="outlineSectionCount"
+          @add-chapter="addChapter"
+          @add-section="addSection"
+          @back="backToConfig"
+          @generate="confirmGeneratePaper"
+          @remove-chapter="removeChapter"
+          @remove-section="removeSection"
+        />
+
+        <GenerationStatusStep
+          v-else
+          :can-download="canDownloadPaper"
+          :copy-loading="copyLoading"
+          :download-loading="downloadLoading"
+          :order="order"
+          :price="price"
+          :progress="paperProgress"
+          :status="status"
+          :status-loading="statusLoading"
+          :status-text="statusText"
+          @back-to-outline="backToOutline"
+          @copy="copyDownloadUrl"
+          @download="downloadPaper"
+          @refresh="() => refreshStatus()"
+        />
+      </section>
+    </div>
   </Page>
 </template>
 
 <style scoped>
 .paper-generate-page {
-  display: flex;
-  justify-content: center;
-  min-height: calc(100vh - 140px);
-  padding: 32px 20px;
+  min-height: calc(100vh - 96px);
+  padding: 24px;
+  background:
+    radial-gradient(circle at 12% 0%, rgb(84 238 214 / 18%), transparent 30%),
+    radial-gradient(circle at 88% 8%, rgb(58 132 255 / 12%), transparent 26%),
+    linear-gradient(180deg, #f7fcff 0%, #eef8fc 44%, #f7f9fc 100%),
+    linear-gradient(90deg, rgb(15 142 176 / 7%) 1px, transparent 1px),
+    linear-gradient(0deg, rgb(15 142 176 / 5%) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    auto,
+    36px 36px,
+    36px 36px;
 }
 
-.generate-card {
-  width: min(1120px, 100%);
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-  box-shadow: none;
-}
-
-.generate-card :deep(.ant-card-head) {
-  min-height: 64px;
-  padding-inline: 28px;
-}
-
-.generate-card :deep(.ant-card-head-title) {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.generate-card :deep(.ant-card-body) {
-  padding: 28px;
-}
-
-.workflow-steps {
-  margin-bottom: 28px;
-}
-
-.number-input {
-  width: 112px;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 28px;
-}
-
-.outline-editor,
-.result-panel {
-  max-width: 960px;
+.workflow-shell {
+  width: min(1520px, 100%);
   margin: 0 auto;
 }
 
-.outline-list {
+.workflow-header {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.outline-item {
-  padding: 14px;
-  background: hsl(var(--muted) / 45%);
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-}
-
-.outline-item__header {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+  gap: 24px;
+  align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: 12px;
+  padding: 10px 4px 24px;
 }
 
-.outline-title-input {
-  flex: 1;
+.workflow-header p {
+  max-width: 620px;
+  margin: 10px 0 0;
+  font-size: 15px;
+  color: #5e7186;
 }
 
-.section-item {
-  padding: 12px;
-  margin-top: 10px;
-  background: hsl(var(--background));
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
+.header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.section-item__title {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.workflow-tip {
+  display: inline-flex;
   gap: 8px;
-  margin-bottom: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  color: #50687a;
+  background: rgb(255 255 255 / 66%);
+  border: 1px solid rgb(174 211 224 / 68%);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(28 120 150 / 6%);
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.workflow-tip i {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  color: #6f8396;
+  background: #eef6fa;
+  border-radius: 999px;
+}
+
+.workflow-tip--active {
+  color: #065f73;
+  background: linear-gradient(135deg, #e7fffb, #f2f7ff);
+  border-color: rgb(20 184 166 / 46%);
+  box-shadow:
+    0 14px 34px rgb(20 120 150 / 12%),
+    inset 0 0 0 1px rgb(255 255 255 / 72%);
+}
+
+.workflow-tip--active i {
+  color: #fff;
+  background: linear-gradient(135deg, #14b8a6, #3678ff);
+}
+
+.workflow-tip--done {
+  color: #27817e;
+  background: rgb(245 253 251 / 78%);
+  border-color: rgb(20 184 166 / 24%);
+}
+
+.workflow-tip--done i {
+  color: #0f766e;
+  background: rgb(20 184 166 / 14%);
+}
+
+.workflow-tip--pending {
+  color: #7a8b9d;
+  background: rgb(247 250 252 / 72%);
+  opacity: 0.52;
+}
+
+.workflow-board {
+  min-height: calc(100vh - 210px);
+  padding: 26px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 92%), rgb(255 255 255 / 78%)),
+    linear-gradient(135deg, rgb(49 216 193 / 10%), transparent 42%, rgb(67 124 255 / 8%));
+  border: 1px solid rgb(174 211 224 / 52%);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgb(37 92 126 / 13%);
+  backdrop-filter: blur(18px);
+}
+
+.workflow-steps {
+  max-width: 1180px;
+  padding: 18px 24px;
+  margin: 0 auto 28px;
+  background: rgb(255 255 255 / 86%);
+  border: 1px solid rgb(174 211 224 / 60%);
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgb(44 118 152 / 8%);
+}
+
+.workflow-steps :deep(.ant-steps-item-title) {
+  color: #2b4057 !important;
+}
+
+.workflow-steps :deep(.ant-steps-item-description) {
+  color: #6b7f94 !important;
+}
+
+.workflow-steps :deep(.ant-steps-item-tail::after) {
+  background-color: rgb(38 171 184 / 22%) !important;
+}
+
+.workflow-steps :deep(.ant-steps-item-icon) {
+  background: #f8fcff;
+  border-color: rgb(38 171 184 / 32%);
+}
+
+.workflow-steps :deep(.ant-steps-item-process .ant-steps-item-icon) {
+  background: linear-gradient(135deg, #13c2c2, #7c5cff);
+  border-color: transparent;
+}
+
+.workflow-steps :deep(.ant-steps-item-finish .ant-steps-item-icon) {
+  background: rgb(20 184 166 / 12%);
+  border-color: rgb(20 184 166 / 62%);
 }
 
 @media (max-width: 768px) {
   .paper-generate-page {
-    align-items: stretch;
-    min-height: auto;
     padding: 12px;
   }
 
-  .number-input {
-    width: 100%;
+  .workflow-header {
+    display: grid;
   }
 
-  .generate-card :deep(.ant-card-head),
-  .generate-card :deep(.ant-card-body) {
-    padding-inline: 16px;
+  h1 {
+    font-size: 28px;
   }
 
-  .form-actions :deep(.ant-btn) {
-    width: 100%;
+  .workflow-board {
+    padding: 14px;
   }
 
-  .outline-item__header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .section-item__title {
-    grid-template-columns: 1fr;
+  .workflow-steps {
+    padding: 14px;
   }
 }
 </style>
