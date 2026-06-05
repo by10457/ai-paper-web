@@ -59,6 +59,11 @@ const textProtocolOptions = [
 ] as const;
 const imageProtocolOptions = [
   {
+    description: '适用于 OpenAI Images API 兼容的图片生成接口。',
+    label: 'OpenAI 图片生成协议',
+    value: 'openai-image-generations',
+  },
+  {
     description: '适用于 Gemini generateContent 兼容的图片生成接口。',
     label: 'Google generateContent 图片协议',
     value: 'google-generate-content',
@@ -141,7 +146,7 @@ function resetForm() {
 
 function handleUsageChange(value: string) {
   if (value === 'figure') {
-    form.provider = 'google-generate-content';
+    form.provider = 'openai-image-generations';
     return;
   }
   if (!textProtocolOptions.some((item) => item.value === form.provider)) {
