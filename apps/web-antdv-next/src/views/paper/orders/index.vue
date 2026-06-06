@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { PaperOrderItem } from '#/api';
 
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 
@@ -24,6 +24,10 @@ const detailOpen = ref(false);
 const userPoints = ref(0);
 const downloadLoadingKey = ref('');
 const copyLoadingKey = ref('');
+let pollTimer: null | ReturnType<typeof setInterval> = null;
+
+const ACTIVE_ORDER_STATUSES = new Set(['generating', 'paid']);
+
 const statusColorMap: Record<string, string> = {
   completed: 'green',
   created: 'default',
@@ -37,11 +41,12 @@ const statusTextMap: Record<string, string> = {
   created: '待支付',
   failed: '生成失败',
   generating: '生成中',
-  paid: '已扣费',
+  paid: '等待生成',
   refunded: '已退款',
 };
 
 async function fetchOrders() {
+  if (loading.value) return;
   loading.value = true;
   try {
     const [res, price] = await Promise.all([
@@ -51,6 +56,7 @@ async function fetchOrders() {
     orders.value = res.items;
     total.value = res.total;
     userPoints.value = price.user_points;
+    syncOrderPolling();
   } finally {
     loading.value = false;
   }
@@ -64,6 +70,32 @@ async function openDetail(order: PaperOrderItem) {
 function formatMinuteTime(value?: null | string) {
   if (!value) return '-';
   return dayjs(value).format('YYYY-MM-DD HH:mm');
+}
+
+function getOrderStatusText(order: PaperOrderItem) {
+  if (order.status === 'paid' && order.error_msg?.includes('自动重试')) {
+    return '等待重试';
+  }
+  return statusTextMap[order.status] || order.status;
+}
+
+function stopOrderPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+function syncOrderPolling() {
+  const hasActiveOrder = orders.value.some((order) =>
+    ACTIVE_ORDER_STATUSES.has(order.status),
+  );
+  if (!hasActiveOrder) {
+    stopOrderPolling();
+    return;
+  }
+  if (pollTimer) return;
+  pollTimer = setInterval(() => {
+    void fetchOrders();
+  }, 5000);
 }
 
 async function resolveDownloadUrl(orderSn: string) {
@@ -113,6 +145,7 @@ function hasDetailDownloadFile() {
 }
 
 onMounted(fetchOrders);
+onBeforeUnmount(stopOrderPolling);
 </script>
 
 <template>
@@ -174,7 +207,7 @@ onMounted(fetchOrders);
         <template #bodyCell="{ column, record }">
           <template v-if="column.dataIndex === 'status'">
             <a-tag :color="statusColorMap[record.status] || 'default'">
-              {{ statusTextMap[record.status] || record.status }}
+              {{ getOrderStatusText(record) }}
             </a-tag>
           </template>
           <template v-if="column.dataIndex === 'created_at'">
@@ -218,7 +251,7 @@ onMounted(fetchOrders);
         <a-descriptions-item label="标题">{{ detail.title }}</a-descriptions-item>
         <a-descriptions-item label="状态">
           <a-tag :color="statusColorMap[detail.status] || 'default'">
-            {{ statusTextMap[detail.status] || detail.status }}
+            {{ getOrderStatusText(detail) }}
           </a-tag>
         </a-descriptions-item>
         <a-descriptions-item label="扣费积分">{{ detail.paid_points }}</a-descriptions-item>

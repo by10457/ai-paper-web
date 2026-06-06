@@ -84,7 +84,7 @@ const statusTextMap: Record<string, string> = {
   created: '待支付',
   failed: '生成失败',
   generating: '生成中',
-  paid: '已扣费',
+  paid: '等待生成',
   refunded: '已退款',
 };
 
