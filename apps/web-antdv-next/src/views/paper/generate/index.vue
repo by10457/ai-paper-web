@@ -22,6 +22,7 @@ import {
   getPaperOrderStatus,
   getPaperPrice,
   payPaperOrder,
+  streamPaperOrderStatus,
 } from '#/api';
 
 import BasicInfoStep from './components/BasicInfoStep.vue';
@@ -50,6 +51,7 @@ const paperProgress = ref(0);
 let outlineProgressTimer: null | ReturnType<typeof setInterval> = null;
 let paperProgressTimer: null | ReturnType<typeof setInterval> = null;
 let pollTimer: null | ReturnType<typeof setInterval> = null;
+let statusStreamController: AbortController | null = null;
 
 const form = reactive<GenerateFormState>({
   about_msg: '',
@@ -96,6 +98,7 @@ const statusText = computed(() => {
   if (!status.value) return '等待生成';
   return statusTextMap[status.value.status] || status.value.status;
 });
+const statusMessage = computed(() => status.value?.message || status.value?.error_msg || '');
 const canDownloadPaper = computed(
   () => status.value?.status === 'completed' && status.value?.has_file === 1,
 );
@@ -157,6 +160,11 @@ function stopPolling() {
   pollTimer = null;
 }
 
+function stopStatusStream() {
+  statusStreamController?.abort();
+  statusStreamController = null;
+}
+
 function shouldPoll(data?: null | PaperOrderStatus) {
   return Boolean(data && ['generating', 'paid'].includes(data.status));
 }
@@ -170,11 +178,47 @@ function startPolling() {
 
 function resetResultState() {
   stopPolling();
+  stopStatusStream();
   clearTimer(paperProgressTimer);
   paperProgressTimer = null;
   paperProgress.value = 0;
   order.value = null;
   status.value = null;
+}
+
+function applyStatusResult(result: PaperOrderStatus) {
+  status.value = result;
+  if (typeof result.progress === 'number') {
+    paperProgress.value = Math.max(paperProgress.value, result.progress);
+  }
+  if (result.status === 'completed') {
+    stopPolling();
+    stopStatusStream();
+    stopPaperProgress(true);
+  } else if (result.status === 'failed') {
+    stopPolling();
+    stopStatusStream();
+    stopPaperProgress(false);
+  } else if (shouldPoll(result) && !paperProgressTimer) startPaperProgress();
+}
+
+function startStatusStream() {
+  if (!order.value?.order_sn) return;
+  stopStatusStream();
+  const controller = new AbortController();
+  statusStreamController = controller;
+  void streamPaperOrderStatus(
+    order.value.order_sn,
+    (nextStatus) => {
+      applyStatusResult(nextStatus);
+    },
+    controller.signal,
+  ).catch((error) => {
+    if (controller.signal.aborted) return;
+    console.warn('论文生成状态 SSE 连接失败，降级为轮询', error);
+    statusStreamController = null;
+    if (shouldPoll(status.value)) startPolling();
+  });
 }
 
 function updateForm(patch: Partial<GenerateFormState>) {
@@ -309,15 +353,12 @@ async function confirmGeneratePaper() {
     status.value = await getPaperOrderStatus(createdOrder.order_sn);
     paperProgress.value = 4;
     step.value = 'result';
-    if (status.value.status === 'completed') {
-      stopPaperProgress(true);
-    } else if (status.value.status === 'failed') {
-      stopPaperProgress(false);
-    } else {
+    applyStatusResult(status.value);
+    if (shouldPoll(status.value)) {
       startPaperProgress();
-      if (shouldPoll(status.value)) startPolling();
+      startStatusStream();
     }
-    message.success('论文已提交生成，页面将自动刷新结果');
+    message.success('论文已提交生成，页面将实时接收进度');
   } finally {
     submitLoading.value = false;
   }
@@ -331,17 +372,8 @@ async function refreshStatus(silent = false) {
   statusLoading.value = !silent;
   try {
     const result = await getPaperOrderStatus(order.value.order_sn);
-    status.value = result;
-    if (result.status === 'completed') {
-      stopPolling();
-      stopPaperProgress(true);
-    } else if (result.status === 'failed') {
-      stopPolling();
-      stopPaperProgress(false);
-    } else if (shouldPoll(result)) {
-      if (!paperProgressTimer) startPaperProgress();
-      if (!pollTimer) startPolling();
-    }
+    applyStatusResult(result);
+    if (shouldPoll(result) && !statusStreamController) startStatusStream();
     if (!silent) message.success('状态已刷新');
   } finally {
     statusLoading.value = false;
@@ -387,6 +419,7 @@ async function downloadPaper() {
 
 onUnmounted(() => {
   stopPolling();
+  stopStatusStream();
   clearTimer(outlineProgressTimer);
   clearTimer(paperProgressTimer);
 });
@@ -455,6 +488,7 @@ onUnmounted(() => {
           :progress="paperProgress"
           :status="status"
           :status-loading="statusLoading"
+          :status-message="statusMessage"
           :status-text="statusText"
           @back-to-outline="backToOutline"
           @copy="copyDownloadUrl"

@@ -1,3 +1,6 @@
+import { useAppConfig } from '@vben/hooks';
+import { useAccessStore } from '@vben/stores';
+
 import { requestClient } from '#/api/request';
 
 export interface PageResult<T> {
@@ -47,10 +50,14 @@ export interface PaperOrderPayResult {
 export interface PaperOrderStatus {
   download_url?: null | string;
   error_msg?: null | string;
+  events?: Array<Record<string, any>>;
   file_key?: null | string;
   has_file: number;
   is_paid: number;
+  message?: null | string;
   order_sn: string;
+  progress?: number;
+  stage?: null | string;
   status: string;
   task_id?: null | string;
 }
@@ -81,6 +88,11 @@ export interface PaperOrderDetail extends PaperOrderItem {
   config_form?: null | Record<string, any>;
   file_key?: null | string;
   outline_json: any[];
+  process_events?: Array<Record<string, any>>;
+  process_metadata?: null | Record<string, any>;
+  result_summary?: null | Record<string, any>;
+  task_progress?: number;
+  task_stage?: null | string;
   task_id?: null | string;
 }
 
@@ -110,6 +122,7 @@ export interface ApiTokenResult extends ApiTokenInfo {
 }
 
 const AI_OUTLINE_TIMEOUT = 180_000;
+const { apiURL } = useAppConfig(import.meta.env, import.meta.env.PROD);
 
 export function getPaperPrice() {
   return requestClient.get<PaperPrice>('/thesis/price');
@@ -146,6 +159,43 @@ export function getPaperOrderStatus(order_sn: string) {
   return requestClient.get<PaperOrderStatus>('/thesis/orders/status', {
     params: { order_sn },
   });
+}
+
+export async function streamPaperOrderStatus(
+  orderSn: string,
+  onStatus: (status: PaperOrderStatus) => void,
+  signal?: AbortSignal,
+) {
+  const accessStore = useAccessStore();
+  const response = await fetch(`${apiURL}/thesis/orders/events?order_sn=${encodeURIComponent(orderSn)}`, {
+    headers: {
+      Authorization: accessStore.accessToken ? `Bearer ${accessStore.accessToken}` : '',
+    },
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`论文生成状态连接失败：${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split('\n\n');
+    buffer = chunks.pop() || '';
+    for (const chunk of chunks) {
+      const dataLine = chunk
+        .split('\n')
+        .find((line) => line.startsWith('data:'));
+      if (!dataLine) continue;
+      const payload = dataLine.slice(5).trim();
+      if (!payload) continue;
+      onStatus(JSON.parse(payload) as PaperOrderStatus);
+    }
+  }
 }
 
 export function listMyPaperOrders(page = 1, pageSize = 10) {

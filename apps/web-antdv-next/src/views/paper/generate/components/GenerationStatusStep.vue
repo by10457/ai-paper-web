@@ -18,6 +18,7 @@ const props = defineProps<{
   progress: number;
   status: null | PaperOrderStatus;
   statusLoading: boolean;
+  statusMessage: string;
   statusText: string;
 }>();
 
@@ -64,6 +65,7 @@ const statusTone = computed(() => {
       <div class="status-copy">
         <div class="section-kicker">STEP 03</div>
         <h2>{{ statusText }}</h2>
+        <p v-if="statusMessage">{{ statusMessage }}</p>
         <p v-if="order?.order_sn">订单号：{{ order.order_sn }}</p>
       </div>
       <div class="status-actions">
@@ -111,7 +113,7 @@ const statusTone = computed(() => {
               ? '论文已生成完成'
               : resultState === 'failed'
                 ? '生成未完成'
-                : '正在生成正文、图表、摘要和文档'
+                : statusMessage || '正在生成正文、图表、摘要和文档'
           }}
         </p>
       </div>

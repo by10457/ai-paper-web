@@ -87,9 +87,12 @@ export interface ModelConfig {
 }
 
 export interface ModelCallLog {
+  call_type: string;
+  completed_at?: null | string;
   config_type: string;
   created_at: string;
   error_message?: null | string;
+  generation_task_id?: null | number;
   id: number;
   input_tokens: number;
   latency_ms: number;
@@ -97,8 +100,13 @@ export interface ModelCallLog {
   model_name: string;
   order_id?: null | number;
   output_tokens: number;
+  prompt_chars: number;
   provider: string;
+  response_chars: number;
+  stage?: null | string;
+  started_at?: null | string;
   status: string;
+  task_id?: null | string;
   user_id?: null | number;
 }
 
