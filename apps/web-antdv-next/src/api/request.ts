@@ -21,6 +21,38 @@ import { refreshTokenApi } from './core';
 
 const { apiURL } = useAppConfig(import.meta.env, import.meta.env.PROD);
 
+function formatValidationDetail(detail: unknown) {
+  if (typeof detail === 'string') return detail;
+  if (!Array.isArray(detail)) return '';
+  return detail
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      if (!item || typeof item !== 'object') return '';
+      const record = item as Record<string, unknown>;
+      const loc = Array.isArray(record.loc)
+        ? record.loc
+            .map(String)
+            .filter((part) => part !== 'body')
+            .join('.')
+        : '';
+      const itemMessage = typeof record.msg === 'string' ? record.msg : '';
+      if (loc && itemMessage) return `${loc}: ${itemMessage}`;
+      return itemMessage || loc;
+    })
+    .filter(Boolean)
+    .join('；');
+}
+
+function formatResponseErrorMessage(responseData: unknown, fallback: string) {
+  if (!responseData || typeof responseData !== 'object') return fallback;
+  const data = responseData as Record<string, unknown>;
+  const detailMessage = formatValidationDetail(data.detail);
+  if (detailMessage) return detailMessage;
+  if (typeof data.error === 'string') return data.error;
+  if (typeof data.message === 'string') return data.message;
+  return fallback;
+}
+
 function createRequestClient(baseURL: string, options?: RequestClientOptions) {
   const client = new RequestClient({
     ...options,
@@ -97,10 +129,7 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
       // 这里可以根据业务进行定制,你可以拿到 error 内的信息进行定制化处理，根据不同的 code 做不同的提示，而不是直接使用 message.error 提示 msg
       // 当前mock接口返回的错误字段是 error 或者 message
       const responseData = error?.response?.data ?? {};
-      const errorMessage =
-        responseData?.detail ?? responseData?.error ?? responseData?.message ?? '';
-      // 如果没有错误信息，则会根据状态码进行提示
-      message.error(errorMessage || msg);
+      message.error(formatResponseErrorMessage(responseData, msg));
     }),
   );
 

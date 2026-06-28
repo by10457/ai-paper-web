@@ -4,6 +4,7 @@ import type { AdminUser, AdminUserDetail } from '#/api';
 import { onMounted, reactive, ref } from 'vue';
 
 import { confirm, Page } from '@vben/common-ui';
+import { IconifyIcon } from '@vben/icons';
 
 import { message } from 'antdv-next';
 import dayjs from 'dayjs';
@@ -23,14 +24,15 @@ const page = ref(1);
 const keyword = ref('');
 const loading = ref(false);
 const createOpen = ref(false);
+const createPasswordVisible = ref(false);
 const detailOpen = ref(false);
 const editOpen = ref(false);
+const resetPasswordVisible = ref(false);
 const passwordOpen = ref(false);
 const pointOpen = ref(false);
 const currentUser = ref<AdminUser>();
 const userDetail = ref<AdminUserDetail>();
 const form = reactive({
-  email: '',
   initial_points: 0,
   nickname: '',
   password: '',
@@ -44,6 +46,21 @@ const editForm = reactive({
 });
 const passwordForm = reactive({ password: '' });
 const pointForm = reactive({ delta: 0, reason: '' });
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@][^\s@]*\.[^\s@]+$/;
+const AUTO_EMAIL_SUFFIX = '@auto.ai-paper.local';
+
+function isValidEmail(value: string) {
+  return EMAIL_PATTERN.test(value.trim());
+}
+
+function isAutoEmail(value?: null | string) {
+  return Boolean(value?.endsWith(AUTO_EMAIL_SUFFIX));
+}
+
+function formatUserEmail(value?: null | string) {
+  if (!value || isAutoEmail(value)) return '未填写';
+  return value;
+}
 
 function formatMinuteTime(value?: null | string) {
   if (!value) return '-';
@@ -66,17 +83,34 @@ async function fetchUsers() {
 }
 
 async function handleCreate() {
-  await createAdminUser(form);
+  const username = form.username.trim();
+  const nickname = form.nickname.trim();
+  if (username.length < 2) {
+    message.warning('用户名至少 2 个字符');
+    return;
+  }
+  if (form.password.length < 8) {
+    message.warning('密码至少 8 位');
+    return;
+  }
+
+  await createAdminUser({
+    initial_points: form.initial_points,
+    nickname,
+    password: form.password,
+    role: form.role,
+    username,
+  });
   message.success('用户已创建');
   createOpen.value = false;
   Object.assign(form, {
-    email: '',
     initial_points: 0,
     nickname: '',
     password: '',
     role: 'user',
     username: '',
   });
+  createPasswordVisible.value = false;
   await fetchUsers();
 }
 
@@ -111,7 +145,7 @@ async function openDetail(user: AdminUser) {
 function openEdit(user: AdminUser) {
   currentUser.value = user;
   Object.assign(editForm, {
-    email: user.email,
+    email: isAutoEmail(user.email) ? '' : user.email,
     is_disabled: user.is_disabled,
     nickname: user.nickname || '',
   });
@@ -120,11 +154,19 @@ function openEdit(user: AdminUser) {
 
 async function handleEdit() {
   if (!currentUser.value) return;
-  await updateAdminUser(currentUser.value.id, {
-    email: editForm.email,
+  const email = editForm.email.trim();
+  if (email && !isValidEmail(email)) {
+    message.warning('请输入有效的邮箱地址');
+    return;
+  }
+  const updateData: Partial<Pick<AdminUser, 'email' | 'is_disabled' | 'nickname'>> = {
     is_disabled: editForm.is_disabled,
-    nickname: editForm.nickname,
-  });
+    nickname: editForm.nickname.trim(),
+  };
+  if (email) {
+    updateData.email = email;
+  }
+  await updateAdminUser(currentUser.value.id, updateData);
   message.success('用户资料已更新');
   editOpen.value = false;
   await fetchUsers();
@@ -136,6 +178,7 @@ async function handleEdit() {
 function openResetPassword(user: AdminUser) {
   currentUser.value = user;
   passwordForm.password = '';
+  resetPasswordVisible.value = false;
   passwordOpen.value = true;
 }
 
@@ -202,6 +245,9 @@ onMounted(fetchUsers);
               {{ record.role === 'admin' ? '管理员' : '普通用户' }}
             </a-tag>
           </template>
+          <template v-if="column.dataIndex === 'email'">
+            {{ formatUserEmail(record.email) }}
+          </template>
           <template v-if="column.dataIndex === 'is_disabled'">
             <a-tag :color="record.is_disabled ? 'red' : 'green'">{{ record.is_disabled ? '禁用' : '正常' }}</a-tag>
           </template>
@@ -222,12 +268,35 @@ onMounted(fetchUsers);
     </a-card>
 
     <a-modal v-model:open="createOpen" title="创建用户" @ok="handleCreate">
-      <a-form layout="vertical">
-        <a-form-item label="用户名"><a-input v-model:value="form.username" /></a-form-item>
-        <a-form-item label="密码">
-          <a-input-password v-model:value="form.password" autocomplete="new-password" />
+      <a-form autocomplete="off" layout="vertical">
+        <a-form-item label="用户名">
+          <a-input
+            v-model:value="form.username"
+            autocomplete="off"
+            name="admin-created-account-name"
+          />
         </a-form-item>
-        <a-form-item label="邮箱"><a-input v-model:value="form.email" /></a-form-item>
+        <a-form-item label="密码">
+          <a-input
+            v-model:value="form.password"
+            autocomplete="off"
+            name="admin-created-temporary-secret"
+            :type="createPasswordVisible ? 'text' : 'password'"
+          >
+            <template #suffix>
+              <a-button
+                type="text"
+                size="small"
+                tabindex="-1"
+                @click="createPasswordVisible = !createPasswordVisible"
+              >
+                <template #icon>
+                  <IconifyIcon :icon="createPasswordVisible ? 'lucide:eye-off' : 'lucide:eye'" />
+                </template>
+              </a-button>
+            </template>
+          </a-input>
+        </a-form-item>
         <a-form-item label="昵称"><a-input v-model:value="form.nickname" /></a-form-item>
         <a-form-item label="初始积分"><a-input-number v-model:value="form.initial_points" class="w-full" :min="0" /></a-form-item>
         <a-form-item label="角色"><a-select v-model:value="form.role" :options="[{value:'user',label:'普通用户'},{value:'admin',label:'管理员'}]" /></a-form-item>
@@ -237,7 +306,7 @@ onMounted(fetchUsers);
     <a-modal v-model:open="editOpen" title="编辑用户" @ok="handleEdit">
       <a-form layout="vertical">
         <a-form-item label="昵称"><a-input v-model:value="editForm.nickname" /></a-form-item>
-        <a-form-item label="邮箱"><a-input v-model:value="editForm.email" /></a-form-item>
+        <a-form-item label="邮箱"><a-input v-model:value="editForm.email" placeholder="可选" /></a-form-item>
         <a-form-item label="账号状态">
           <a-switch
             v-model:checked="editForm.is_disabled"
@@ -262,8 +331,22 @@ onMounted(fetchUsers);
             v-model:value="passwordForm.password"
             autocomplete="off"
             name="admin-reset-temporary-password"
+            :type="resetPasswordVisible ? 'text' : 'password'"
             placeholder="至少 8 位"
-          />
+          >
+            <template #suffix>
+              <a-button
+                type="text"
+                size="small"
+                tabindex="-1"
+                @click="resetPasswordVisible = !resetPasswordVisible"
+              >
+                <template #icon>
+                  <IconifyIcon :icon="resetPasswordVisible ? 'lucide:eye-off' : 'lucide:eye'" />
+                </template>
+              </a-button>
+            </template>
+          </a-input>
         </a-form-item>
       </a-form>
     </a-modal>
@@ -295,7 +378,7 @@ onMounted(fetchUsers);
           <a-descriptions-item label="用户 ID">{{ userDetail.user.id }}</a-descriptions-item>
           <a-descriptions-item label="用户名">{{ userDetail.user.username }}</a-descriptions-item>
           <a-descriptions-item label="昵称">{{ userDetail.user.nickname || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="邮箱">{{ userDetail.user.email }}</a-descriptions-item>
+          <a-descriptions-item label="邮箱">{{ formatUserEmail(userDetail.user.email) }}</a-descriptions-item>
           <a-descriptions-item label="角色">
             <a-tag :color="userDetail.user.role === 'admin' ? 'blue' : 'default'">
               {{ userDetail.user.role === 'admin' ? '管理员' : '普通用户' }}

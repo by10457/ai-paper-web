@@ -138,7 +138,7 @@ export function getAdminUserDetail(userId: number) {
 }
 
 export function createAdminUser(data: {
-  email: string;
+  email?: string;
   initial_points: number;
   nickname?: string;
   password: string;
