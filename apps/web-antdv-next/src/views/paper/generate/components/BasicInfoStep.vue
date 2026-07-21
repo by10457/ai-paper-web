@@ -15,6 +15,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   change: [patch: Partial<GenerateFormState>];
   generate: [];
+  recommend: [];
 }>();
 
 function updateForm(patch: Partial<GenerateFormState>) {
@@ -55,131 +56,169 @@ function updateAboutMessage(value: string) {
 </script>
 
 <template>
-  <section class="step-grid">
-    <div class="step-panel step-panel--primary">
-      <div class="section-kicker">STEP 01</div>
-      <h2>填写基本信息生成大纲</h2>
-      <p>输入论文主题后，系统会先生成可编辑的大纲结构。</p>
+  <div class="basic-info-step">
+    <div class="step-toolbar">
+      <a-button
+        class="ai-topic-button"
+        size="large"
+        type="primary"
+        @click="$emit('recommend')"
+      >
+        <template #icon>
+          <IconifyIcon icon="lucide:wand-sparkles" />
+        </template>
+        AI 智能选题
+      </a-button>
+    </div>
 
-      <div class="console-panel">
-        <div class="console-head">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <div class="console-line">
-          <span>mode</span>
-          <strong>outline_planning</strong>
-        </div>
-        <div class="console-line">
-          <span>target</span>
-          <strong>{{ form.target_word_count }} words</strong>
-        </div>
-        <div class="console-line">
-          <span>references</span>
-          <strong>{{ form.wxnum }}</strong>
-        </div>
-        <div class="console-flow">
-          <i></i>
-          <i></i>
-          <i></i>
+    <section class="step-grid">
+      <div class="step-panel step-panel--primary">
+        <div class="section-kicker">STEP 01</div>
+        <h2>填写基本信息生成大纲</h2>
+        <p>输入论文主题后，系统会先生成可编辑的大纲结构。</p>
+
+        <div class="console-panel">
+          <div class="console-head">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="console-line">
+            <span>mode</span>
+            <strong>outline_planning</strong>
+          </div>
+          <div class="console-line">
+            <span>target</span>
+            <strong>{{ form.target_word_count }} words</strong>
+          </div>
+          <div class="console-line">
+            <span>references</span>
+            <strong>{{ form.wxnum }}</strong>
+          </div>
+          <div class="console-flow">
+            <i></i>
+            <i></i>
+            <i></i>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="step-panel form-panel">
-      <a-form layout="vertical">
-        <a-form-item label="论文题目" required>
-          <a-input
-            :value="form.title"
-            size="large"
-            placeholder="例如：基于深度学习的图像识别技术研究"
-            @update:value="updateTitle"
-          />
-        </a-form-item>
+      <div class="step-panel form-panel">
+        <a-form layout="vertical">
+          <a-form-item label="论文题目" required>
+            <a-input
+              :value="form.title"
+              size="large"
+              placeholder="例如：基于深度学习的图像识别技术研究"
+              @update:value="updateTitle"
+            />
+          </a-form-item>
 
-        <div class="form-grid">
-          <a-form-item label="目标字数">
-            <a-input-number
-              :value="form.target_word_count"
-              class="full-input"
-              :min="3000"
-              :step="1000"
-              @update:value="updateTargetWordCount"
-            />
-          </a-form-item>
-          <a-form-item label="参考文献数量">
-            <a-input-number
-              :value="form.wxnum"
-              class="full-input"
-              :max="80"
-              :min="5"
-              @update:value="updateReferenceCount"
-            />
-          </a-form-item>
-          <a-form-item label="代码语言">
-            <a-select
-              :value="form.codetype"
-              :options="codeTypeOptions"
-              @update:value="updateCodeType"
-            />
-          </a-form-item>
-          <a-form-item label="文献标注">
-            <a-select
-              :value="form.wxquote"
-              :options="quoteOptions"
-              @update:value="updateQuoteType"
-            />
-          </a-form-item>
-          <a-form-item label="外文文献">
-            <a-select
-              :value="form.language"
-              :options="yesNoOptions"
-              @update:value="updateLanguage"
-            />
-          </a-form-item>
-          <a-form-item label="三级大纲">
-            <div class="switch-row">
-              <a-switch
-                :checked="form.three_level"
-                @update:checked="updateThreeLevel"
+          <div class="form-grid">
+            <a-form-item label="目标字数">
+              <a-input-number
+                :value="form.target_word_count"
+                class="full-input"
+                :min="3000"
+                :step="1000"
+                @update:value="updateTargetWordCount"
               />
-              <span>{{ form.three_level ? '开启' : '关闭' }}</span>
-            </div>
-          </a-form-item>
-        </div>
-
-        <a-form-item label="写作方向补充">
-          <a-textarea
-            :value="form.about_msg"
-            :rows="5"
-            placeholder="可填写研究对象、技术路线、学校格式要求等"
-            @update:value="updateAboutMessage"
-          />
-        </a-form-item>
-
-        <div v-if="loading" class="progress-block">
-          <div class="progress-copy">
-            <span>AI 正在规划论文结构</span>
-            <strong>{{ progress }}%</strong>
+            </a-form-item>
+            <a-form-item label="参考文献数量">
+              <a-input-number
+                :value="form.wxnum"
+                class="full-input"
+                :max="80"
+                :min="5"
+                @update:value="updateReferenceCount"
+              />
+            </a-form-item>
+            <a-form-item label="代码语言">
+              <a-select
+                :value="form.codetype"
+                :options="codeTypeOptions"
+                @update:value="updateCodeType"
+              />
+            </a-form-item>
+            <a-form-item label="文献标注">
+              <a-select
+                :value="form.wxquote"
+                :options="quoteOptions"
+                @update:value="updateQuoteType"
+              />
+            </a-form-item>
+            <a-form-item label="外文文献">
+              <a-select
+                :value="form.language"
+                :options="yesNoOptions"
+                @update:value="updateLanguage"
+              />
+            </a-form-item>
+            <a-form-item label="三级大纲">
+              <div class="switch-row">
+                <a-switch
+                  :checked="form.three_level"
+                  @update:checked="updateThreeLevel"
+                />
+                <span>{{ form.three_level ? '开启' : '关闭' }}</span>
+              </div>
+            </a-form-item>
           </div>
-          <a-progress :percent="progress" :show-info="false" status="active" />
-        </div>
 
-        <div class="form-actions">
-          <a-button size="large" type="primary" :loading="loading" @click="$emit('generate')">
-            <template #icon>
-              <IconifyIcon icon="lucide:sparkles" />
-            </template>
-            {{ loading ? '正在生成大纲' : '生成免费大纲' }}
-          </a-button>
-        </div>
-      </a-form>
-    </div>
-  </section>
+          <a-form-item label="写作方向补充">
+            <a-textarea
+              :value="form.about_msg"
+              :rows="5"
+              placeholder="可填写研究对象、技术路线、学校格式要求等"
+              @update:value="updateAboutMessage"
+            />
+          </a-form-item>
+
+          <div v-if="loading" class="progress-block">
+            <div class="progress-copy">
+              <span>AI 正在规划论文结构</span>
+              <strong>{{ progress }}%</strong>
+            </div>
+            <a-progress
+              :percent="progress"
+              :show-info="false"
+              status="active"
+            />
+          </div>
+
+          <div class="form-actions">
+            <a-button
+              size="large"
+              type="primary"
+              :loading="loading"
+              @click="$emit('generate')"
+            >
+              <template #icon>
+                <IconifyIcon icon="lucide:sparkles" />
+              </template>
+              {{ loading ? '正在生成大纲' : '生成免费大纲' }}
+            </a-button>
+          </div>
+        </a-form>
+      </div>
+    </section>
+  </div>
 </template>
 
 <style scoped>
+.step-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.ai-topic-button {
+  min-width: 148px;
+  background: linear-gradient(135deg, #12b8ae, #326ff4);
+  border: 0;
+  box-shadow: 0 12px 28px rgb(36 123 204 / 20%);
+}
+
 .step-grid {
   display: grid;
   grid-template-columns: minmax(280px, 0.8fr) minmax(520px, 1.4fr);

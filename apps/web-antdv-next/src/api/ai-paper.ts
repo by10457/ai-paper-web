@@ -128,6 +128,16 @@ export function getPaperPrice() {
   return requestClient.get<PaperPrice>('/thesis/price');
 }
 
+export function recommendPaperTitles(content: string) {
+  return requestClient.post<string[]>(
+    '/thesis/titles/recommend',
+    { content },
+    {
+      timeout: AI_OUTLINE_TIMEOUT,
+    },
+  );
+}
+
 export function createPaperOutline(data: {
   about_msg?: string;
   form_params: Record<string, any>;
@@ -167,12 +177,17 @@ export async function streamPaperOrderStatus(
   signal?: AbortSignal,
 ) {
   const accessStore = useAccessStore();
-  const response = await fetch(`${apiURL}/thesis/orders/events?order_sn=${encodeURIComponent(orderSn)}`, {
-    headers: {
-      Authorization: accessStore.accessToken ? `Bearer ${accessStore.accessToken}` : '',
+  const response = await fetch(
+    `${apiURL}/thesis/orders/events?order_sn=${encodeURIComponent(orderSn)}`,
+    {
+      headers: {
+        Authorization: accessStore.accessToken
+          ? `Bearer ${accessStore.accessToken}`
+          : '',
+      },
+      signal,
     },
-    signal,
-  });
+  );
   if (!response.ok || !response.body) {
     throw new Error(`论文生成状态连接失败：${response.status}`);
   }
@@ -211,9 +226,12 @@ export function getMyPaperOrderDetail(order_sn: string) {
 }
 
 export function getPaperOrderDownloadUrl(order_sn: string) {
-  return requestClient.get<PaperOrderDownloadUrl>('/thesis/orders/download-url', {
-    params: { order_sn },
-  });
+  return requestClient.get<PaperOrderDownloadUrl>(
+    '/thesis/orders/download-url',
+    {
+      params: { order_sn },
+    },
+  );
 }
 
 export function listPointLedgers(page = 1, pageSize = 10) {

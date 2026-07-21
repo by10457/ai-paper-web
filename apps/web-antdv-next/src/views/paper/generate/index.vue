@@ -12,6 +12,7 @@ import type {
 import { computed, onUnmounted, reactive, ref } from 'vue';
 
 import { confirm, Page } from '@vben/common-ui';
+import { IconifyIcon } from '@vben/icons';
 
 import { message } from 'antdv-next';
 
@@ -22,6 +23,7 @@ import {
   getPaperOrderStatus,
   getPaperPrice,
   payPaperOrder,
+  recommendPaperTitles,
   streamPaperOrderStatus,
 } from '#/api';
 
@@ -47,6 +49,10 @@ const order = ref<null | PaperOrderCreateResult>(null);
 const status = ref<null | PaperOrderStatus>(null);
 const outlineProgress = ref(0);
 const paperProgress = ref(0);
+const titleRecommendationOpen = ref(false);
+const titleRecommendationLoading = ref(false);
+const titleRecommendationDescription = ref('');
+const recommendedTitles = ref<string[]>([]);
 
 let outlineProgressTimer: null | ReturnType<typeof setInterval> = null;
 let paperProgressTimer: null | ReturnType<typeof setInterval> = null;
@@ -98,7 +104,9 @@ const statusText = computed(() => {
   if (!status.value) return '等待生成';
   return statusTextMap[status.value.status] || status.value.status;
 });
-const statusMessage = computed(() => status.value?.message || status.value?.error_msg || '');
+const statusMessage = computed(
+  () => status.value?.message || status.value?.error_msg || '',
+);
 const canDownloadPaper = computed(
   () => status.value?.status === 'completed' && status.value?.has_file === 1,
 );
@@ -223,6 +231,40 @@ function startStatusStream() {
 
 function updateForm(patch: Partial<GenerateFormState>) {
   Object.assign(form, patch);
+}
+
+function openTitleRecommendation() {
+  titleRecommendationDescription.value = form.about_msg.trim();
+  recommendedTitles.value = [];
+  titleRecommendationOpen.value = true;
+}
+
+function closeTitleRecommendation() {
+  if (titleRecommendationLoading.value) return;
+  titleRecommendationOpen.value = false;
+}
+
+async function generateTitleRecommendations() {
+  const content = titleRecommendationDescription.value.trim();
+  if (content.length < 10) {
+    message.warning('请至少输入 10 个字的选题描述');
+    return;
+  }
+
+  titleRecommendationLoading.value = true;
+  recommendedTitles.value = [];
+  try {
+    recommendedTitles.value = await recommendPaperTitles(content);
+    message.success('已生成 20 个论文题目，请选择一个感兴趣的方向');
+  } finally {
+    titleRecommendationLoading.value = false;
+  }
+}
+
+function selectRecommendedTitle(title: string) {
+  updateForm({ title });
+  titleRecommendationOpen.value = false;
+  message.success('已将选中的题目填入论文题目');
 }
 
 function validateConfig() {
@@ -443,12 +485,6 @@ onUnmounted(() => {
       </header>
 
       <section class="workflow-board">
-        <a-steps class="workflow-steps" :current="currentStep" responsive>
-          <a-step title="填写基本信息生成大纲" />
-          <a-step title="编辑大纲" />
-          <a-step title="论文生成情况" />
-        </a-steps>
-
         <BasicInfoStep
           v-if="step === 'config'"
           :code-type-options="codeTypeOptions"
@@ -459,6 +495,7 @@ onUnmounted(() => {
           :yes-no-options="yesNoOptions"
           @change="updateForm"
           @generate="generateOutline"
+          @recommend="openTitleRecommendation"
         />
 
         <OutlineEditorStep
@@ -497,6 +534,89 @@ onUnmounted(() => {
         />
       </section>
     </div>
+
+    <a-modal
+      v-model:open="titleRecommendationOpen"
+      :closable="!titleRecommendationLoading"
+      :footer="null"
+      :keyboard="!titleRecommendationLoading"
+      :mask-closable="!titleRecommendationLoading"
+      title="AI 智能选题"
+      width="760px"
+    >
+      <div class="title-recommendation-modal">
+        <p class="title-recommendation-intro">
+          描述你的研究方向、应用场景、关注问题或期望采用的方法，AI 将推荐 20
+          个可写作的论文题目。
+        </p>
+
+        <a-textarea
+          v-model:value="titleRecommendationDescription"
+          :auto-size="{ minRows: 4, maxRows: 8 }"
+          :disabled="titleRecommendationLoading"
+          :maxlength="5000"
+          placeholder="例如：希望研究人工智能在高校个性化教学中的应用，重点关注学习效果、教师角色和实施策略"
+        />
+
+        <div class="title-recommendation-actions">
+          <a-button
+            :disabled="titleRecommendationLoading"
+            @click="closeTitleRecommendation"
+          >
+            {{ recommendedTitles.length > 0 ? '关闭' : '取消' }}
+          </a-button>
+          <a-button
+            :loading="titleRecommendationLoading"
+            type="primary"
+            @click="generateTitleRecommendations"
+          >
+            <template #icon>
+              <IconifyIcon icon="lucide:sparkles" />
+            </template>
+            {{ recommendedTitles.length > 0 ? '重新生成' : '生成题目' }}
+          </a-button>
+        </div>
+
+        <div
+          v-if="titleRecommendationLoading"
+          class="title-recommendation-loading"
+        >
+          <a-spin size="large" />
+          <strong>AI 正在分析描述并生成论文题目</strong>
+          <span>通常需要几十秒，请稍候</span>
+        </div>
+
+        <div
+          v-else-if="recommendedTitles.length > 0"
+          class="title-recommendation-results"
+        >
+          <div class="title-recommendation-result-head">
+            <div>
+              <strong>选择一个感兴趣的题目</strong>
+              <span>点击后将自动填写到“论文题目”输入框</span>
+            </div>
+            <a-tag color="cyan">{{ recommendedTitles.length }} 个推荐</a-tag>
+          </div>
+
+          <div class="title-option-grid">
+            <button
+              v-for="(title, index) in recommendedTitles"
+              :key="title"
+              class="title-option"
+              type="button"
+              @click="selectRecommendedTitle(title)"
+            >
+              <span class="title-option-index">{{ index + 1 }}</span>
+              <span class="title-option-text">{{ title }}</span>
+              <IconifyIcon
+                class="title-option-arrow"
+                icon="lucide:arrow-up-right"
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+    </a-modal>
   </Page>
 </template>
 
@@ -611,48 +731,136 @@ onUnmounted(() => {
   padding: 26px;
   background:
     linear-gradient(180deg, rgb(255 255 255 / 92%), rgb(255 255 255 / 78%)),
-    linear-gradient(135deg, rgb(49 216 193 / 10%), transparent 42%, rgb(67 124 255 / 8%));
+    linear-gradient(
+      135deg,
+      rgb(49 216 193 / 10%),
+      transparent 42%,
+      rgb(67 124 255 / 8%)
+    );
   border: 1px solid rgb(174 211 224 / 52%);
   border-radius: 8px;
   box-shadow: 0 24px 70px rgb(37 92 126 / 13%);
   backdrop-filter: blur(18px);
 }
 
-.workflow-steps {
-  max-width: 1180px;
-  padding: 18px 24px;
-  margin: 0 auto 28px;
-  background: rgb(255 255 255 / 86%);
-  border: 1px solid rgb(174 211 224 / 60%);
+.title-recommendation-intro {
+  margin: 0 0 16px;
+  line-height: 1.7;
+  color: #5f7388;
+}
+
+.title-recommendation-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.title-recommendation-loading {
+  display: grid;
+  gap: 10px;
+  place-items: center;
+  min-height: 230px;
+  margin-top: 20px;
+  color: #315469;
+  background: linear-gradient(
+    135deg,
+    rgb(236 255 251 / 72%),
+    rgb(242 248 255 / 76%)
+  );
+  border: 1px solid rgb(92 199 210 / 20%);
   border-radius: 8px;
-  box-shadow: 0 14px 34px rgb(44 118 152 / 8%);
 }
 
-.workflow-steps :deep(.ant-steps-item-title) {
-  color: #2b4057 !important;
+.title-recommendation-loading span {
+  font-size: 13px;
+  color: #74889c;
 }
 
-.workflow-steps :deep(.ant-steps-item-description) {
-  color: #6b7f94 !important;
+.title-recommendation-results {
+  margin-top: 22px;
 }
 
-.workflow-steps :deep(.ant-steps-item-tail::after) {
-  background-color: rgb(38 171 184 / 22%) !important;
+.title-recommendation-result-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
 }
 
-.workflow-steps :deep(.ant-steps-item-icon) {
-  background: #f8fcff;
-  border-color: rgb(38 171 184 / 32%);
+.title-recommendation-result-head div {
+  display: grid;
+  gap: 4px;
 }
 
-.workflow-steps :deep(.ant-steps-item-process .ant-steps-item-icon) {
-  background: linear-gradient(135deg, #13c2c2, #7c5cff);
-  border-color: transparent;
+.title-recommendation-result-head strong {
+  color: #20364b;
 }
 
-.workflow-steps :deep(.ant-steps-item-finish .ant-steps-item-icon) {
+.title-recommendation-result-head span {
+  font-size: 13px;
+  color: #74889c;
+}
+
+.title-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 430px;
+  padding: 2px 4px 2px 2px;
+  overflow-y: auto;
+}
+
+.title-option {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 18px;
+  gap: 10px;
+  align-items: center;
+  min-height: 64px;
+  padding: 12px;
+  color: #294256;
+  text-align: left;
+  cursor: pointer;
+  background: #f9fcfe;
+  border: 1px solid rgb(174 211 224 / 72%);
+  border-radius: 8px;
+  transition:
+    color 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.title-option:hover,
+.title-option:focus-visible {
+  color: #075d72;
+  outline: none;
+  background: linear-gradient(135deg, #effffb, #f4f8ff);
+  border-color: rgb(20 184 166 / 54%);
+  box-shadow: 0 10px 24px rgb(28 120 150 / 10%);
+  transform: translateY(-1px);
+}
+
+.title-option-index {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0d827f;
   background: rgb(20 184 166 / 12%);
-  border-color: rgb(20 184 166 / 62%);
+  border-radius: 999px;
+}
+
+.title-option-text {
+  line-height: 1.55;
+}
+
+.title-option-arrow {
+  color: #8aa0b1;
 }
 
 @media (max-width: 768px) {
@@ -672,8 +880,8 @@ onUnmounted(() => {
     padding: 14px;
   }
 
-  .workflow-steps {
-    padding: 14px;
+  .title-option-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -15,6 +15,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       affixTab: true,
       icon: 'lucide:sparkles',
+      keepAlive: true,
       order: -13,
       title: 'AI 论文',
     },
