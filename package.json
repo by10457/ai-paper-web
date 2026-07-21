@@ -39,6 +39,7 @@
     "commit": "czg",
     "dev": "pnpm -F @vben/web-antdv-next run dev",
     "dev:antdv-next": "pnpm -F @vben/web-antdv-next run dev",
+    "deploy:api": "bash ./scripts/deploy-to-api.sh",
     "format": "vsh lint --format",
     "lint": "vsh lint",
     "postinstall": "pnpm -r run stub --if-present",
