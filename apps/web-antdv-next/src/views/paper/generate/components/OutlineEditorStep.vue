@@ -1,5 +1,8 @@
 <script lang="ts" setup>
-import type { PaperOutlineChapter } from './types';
+import type {
+  PaperOutlineChapter,
+  PaperOutlineSection,
+} from './types';
 
 import { IconifyIcon } from '@vben/icons';
 
@@ -11,15 +14,19 @@ defineProps<{
   outline: PaperOutlineChapter[];
   outlineRecordId?: number;
   sectionCount: number;
+  subsectionCount: number;
+  threeLevel: boolean;
 }>();
 
 defineEmits<{
   addChapter: [];
   addSection: [chapter: PaperOutlineChapter];
+  addSubsection: [section: PaperOutlineSection];
   back: [];
   generate: [];
   removeChapter: [index: number];
   removeSection: [chapter: PaperOutlineChapter, sectionIndex: number];
+  removeSubsection: [section: PaperOutlineSection, subsectionIndex: number];
 }>();
 </script>
 
@@ -40,6 +47,10 @@ defineEmits<{
         <div>
           <span>小节</span>
           <strong>{{ sectionCount }}</strong>
+        </div>
+        <div>
+          <span>三级小节</span>
+          <strong>{{ subsectionCount }}</strong>
         </div>
       </div>
       <div v-if="keywords || abstractText" class="summary-panel">
@@ -136,6 +147,47 @@ defineEmits<{
               :rows="2"
               placeholder="本节写作要点"
             />
+            <div
+              v-if="threeLevel || section.subsections.length > 0"
+              class="subsection-list"
+            >
+              <div class="subsection-toolbar">
+                <span>三级小节</span>
+                <a-button size="small" @click="$emit('addSubsection', section)">
+                  <template #icon>
+                    <IconifyIcon icon="lucide:plus" />
+                  </template>
+                  添加
+                </a-button>
+              </div>
+              <div
+                v-for="(subsection, subsectionIndex) in section.subsections"
+                :key="subsectionIndex"
+                class="subsection-item"
+              >
+                <span>
+                  {{ chapterIndex + 1 }}.{{ sectionIndex + 1 }}.{{ subsectionIndex + 1 }}
+                </span>
+                <a-input
+                  v-model:value="subsection.name"
+                  :placeholder="`${chapterIndex + 1}.${sectionIndex + 1}.${subsectionIndex + 1} 三级小节标题`"
+                />
+                <a-input
+                  v-model:value="subsection.abstract"
+                  placeholder="三级小节写作要点"
+                />
+                <a-button
+                  danger
+                  size="small"
+                  :disabled="threeLevel && section.subsections.length <= 1"
+                  @click="$emit('removeSubsection', section, subsectionIndex)"
+                >
+                  <template #icon>
+                    <IconifyIcon icon="lucide:x" />
+                  </template>
+                </a-button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -186,7 +238,7 @@ h2 {
 
 .metric-list {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin-top: 24px;
 }
@@ -308,6 +360,35 @@ h2 {
   color: #52708b;
 }
 
+.subsection-list {
+  padding: 12px;
+  margin-top: 12px;
+  background: #f8fafc;
+  border: 1px dashed rgb(174 211 224 / 72%);
+  border-radius: 8px;
+}
+
+.subsection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #52708b;
+}
+
+.subsection-item {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.subsection-item > span {
+  font-weight: 700;
+  color: #6d7f91;
+}
+
 @media (max-width: 1180px) {
   .outline-layout {
     grid-template-columns: 1fr;
@@ -334,6 +415,10 @@ h2 {
   }
 
   .section-item__title {
+    grid-template-columns: 1fr;
+  }
+
+  .subsection-item {
     grid-template-columns: 1fr;
   }
 }

@@ -5,6 +5,7 @@ import type {
   PaperOrderStatus,
   PaperOutlineChapter,
   PaperOutlineSection,
+  PaperOutlineSubsection,
   PaperPrice,
   WorkflowStep,
 } from './components/types';
@@ -99,6 +100,18 @@ const statusTextMap: Record<string, string> = {
 const currentStep = computed(() => stepIndexMap[step.value]);
 const outlineSectionCount = computed(() =>
   outline.value.reduce((total, chapter) => total + chapter.sections.length, 0),
+);
+const outlineSubsectionCount = computed(() =>
+  outline.value.reduce(
+    (total, chapter) =>
+      total +
+      chapter.sections.reduce(
+        (sectionTotal, section) =>
+          sectionTotal + (section.subsections?.length || 0),
+        0,
+      ),
+    0,
+  ),
 );
 const statusText = computed(() => {
   if (!status.value) return '等待生成';
@@ -287,10 +300,17 @@ function getWorkflowTipClass(index: number) {
   };
 }
 
-function createBlankSection(): PaperOutlineSection {
+function createBlankSubsection(): PaperOutlineSubsection {
   return {
     abstract: '',
     name: '',
+  };
+}
+
+function createBlankSection(): PaperOutlineSection {
+  return {
+    ...createBlankSubsection(),
+    subsections: form.three_level ? [createBlankSubsection()] : [],
   };
 }
 
@@ -313,6 +333,17 @@ function removeSection(chapter: PaperOutlineChapter, sectionIndex: number) {
   chapter.sections.splice(sectionIndex, 1);
 }
 
+function addSubsection(section: PaperOutlineSection) {
+  section.subsections.push(createBlankSubsection());
+}
+
+function removeSubsection(
+  section: PaperOutlineSection,
+  subsectionIndex: number,
+) {
+  section.subsections.splice(subsectionIndex, 1);
+}
+
 function validateOutline() {
   if (!outlineRecordId.value || outline.value.length === 0) {
     message.warning('请先生成大纲');
@@ -329,6 +360,18 @@ function validateOutline() {
   );
   if (hasInvalidSection) {
     message.warning('每个章节至少保留一个小节，且小节标题不能为空');
+    return false;
+  }
+  const hasInvalidSubsection = outline.value.some((chapter) =>
+    chapter.sections.some(
+      (section) =>
+        form.three_level &&
+        (section.subsections.length === 0 ||
+          section.subsections.some((subsection) => !subsection.name.trim())),
+    ),
+  );
+  if (hasInvalidSubsection) {
+    message.warning('三级大纲下每个二级小节至少保留一个三级小节，且标题不能为空');
     return false;
   }
   return true;
@@ -352,7 +395,13 @@ async function generateOutline() {
       title: form.title.trim(),
     });
     outlineRecordId.value = result.record_id;
-    outline.value = result.outline;
+    outline.value = result.outline.map((chapter) => ({
+      ...chapter,
+      sections: chapter.sections.map((section) => ({
+        ...section,
+        subsections: section.subsections || [],
+      })),
+    }));
     outlineAbstract.value = result.abstract;
     outlineKeywords.value = result.keywords;
     resetResultState();
@@ -507,12 +556,16 @@ onUnmounted(() => {
           :outline="outline"
           :outline-record-id="outlineRecordId"
           :section-count="outlineSectionCount"
+          :subsection-count="outlineSubsectionCount"
+          :three-level="form.three_level"
           @add-chapter="addChapter"
           @add-section="addSection"
+          @add-subsection="addSubsection"
           @back="backToConfig"
           @generate="confirmGeneratePaper"
           @remove-chapter="removeChapter"
           @remove-section="removeSection"
+          @remove-subsection="removeSubsection"
         />
 
         <GenerationStatusStep

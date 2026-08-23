@@ -21,5 +21,6 @@ export {
   type PaperOrderStatus,
   type PaperOutlineChapter,
   type PaperOutlineSection,
+  type PaperOutlineSubsection,
   type PaperPrice,
 } from '#/api';

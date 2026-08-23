@@ -72,6 +72,35 @@ export interface AdminOrderDetail {
   request_payload?: null | Record<string, any>;
 }
 
+export interface AdminThesisMaterialOrder {
+  completed_at?: null | string;
+  cost_points: number;
+  created_at: string;
+  document_type: string;
+  id: number;
+  last_error?: null | string;
+  order_sn: string;
+  paid_points: number;
+  progress: number;
+  refunded_points: number;
+  stage?: null | string;
+  status: string;
+  task_id?: null | string;
+  title: string;
+  user_id: number;
+  username: string;
+}
+
+export interface AdminThesisMaterialOrderDetail {
+  download_url?: null | string;
+  file_key?: null | string;
+  local_file_key?: null | string;
+  order: AdminThesisMaterialOrder;
+  request_payload: Record<string, any>;
+  result_data?: null | Record<string, any>;
+  storage_provider?: null | string;
+}
+
 export interface ModelConfig {
   api_base_url: string;
   config_type: string;
@@ -181,6 +210,25 @@ export function listAdminOrders(params: {
 
 export function getAdminOrderDetail(orderId: number) {
   return requestClient.get<AdminOrderDetail>(`/admin/orders/${orderId}`);
+}
+
+export function listAdminThesisMaterialOrders(params: {
+  document_type?: string;
+  keyword?: string;
+  page?: number;
+  page_size?: number;
+  status?: string;
+}) {
+  return requestClient.get<PageResult<AdminThesisMaterialOrder>>(
+    '/admin/thesis-material-orders',
+    { params },
+  );
+}
+
+export function getAdminThesisMaterialOrderDetail(orderId: number) {
+  return requestClient.get<AdminThesisMaterialOrderDetail>(
+    `/admin/thesis-material-orders/${orderId}`,
+  );
 }
 
 export function retryAdminOrder(orderId: number) {
