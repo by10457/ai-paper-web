@@ -17,7 +17,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'LegacyWritingGenerate',
     path: '/writing/generate',
-    redirect: '/thesis-materials/generate',
+    redirect: '/paper/generate',
   },
   {
     meta: {
@@ -26,7 +26,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'LegacyPaperMaterialGenerate',
     path: '/paper-materials/generate',
-    redirect: '/thesis-materials/generate',
+    redirect: '/paper/generate',
   },
   {
     meta: {
@@ -35,7 +35,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'LegacyWritingOrders',
     path: '/writing/orders',
-    redirect: '/thesis-materials/orders',
+    redirect: '/paper/orders',
   },
   {
     meta: {
@@ -44,7 +44,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'LegacyPaperMaterialOrders',
     path: '/paper-materials/orders',
-    redirect: '/thesis-materials/orders',
+    redirect: '/paper/orders',
   },
   {
     meta: {
@@ -77,31 +77,29 @@ const routes: RouteRecordRaw[] = [
     path: '/paper/generate',
   },
   {
-    component: () => import('#/views/thesis-materials/generate/index.vue'),
     meta: {
-      icon: 'lucide:file-pen-line',
-      order: -12,
-      title: '论文材料',
+      hideInMenu: true,
+      title: '论文材料生成兼容入口',
     },
     name: 'ThesisMaterialGenerate',
     path: '/thesis-materials/generate',
+    redirect: '/paper/generate',
   },
   {
-    component: () => import('#/views/thesis-materials/orders/index.vue'),
     meta: {
-      icon: 'lucide:files',
-      order: -11,
-      title: '材料记录',
+      hideInMenu: true,
+      title: '论文材料订单兼容入口',
     },
     name: 'ThesisMaterialOrders',
     path: '/thesis-materials/orders',
+    redirect: '/paper/orders',
   },
   {
     component: () => import('#/views/paper/orders/index.vue'),
     meta: {
       icon: 'lucide:receipt-text',
-      order: -10,
-      title: '我的订单',
+      order: -12,
+      title: '订单管理',
     },
     name: 'PaperOrders',
     path: '/paper/orders',

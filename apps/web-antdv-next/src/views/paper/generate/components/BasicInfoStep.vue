@@ -6,6 +6,7 @@ import { IconifyIcon } from '@vben/icons';
 const props = defineProps<{
   codeTypeOptions: SelectOption[];
   form: GenerateFormState;
+  hideTitle?: boolean;
   loading: boolean;
   progress: number;
   quoteOptions: SelectOption[];
@@ -57,7 +58,7 @@ function updateAboutMessage(value: string) {
 
 <template>
   <div class="basic-info-step">
-    <div class="step-toolbar">
+    <div v-if="!hideTitle" class="step-toolbar">
       <a-button
         class="ai-topic-button"
         size="large"
@@ -74,8 +75,8 @@ function updateAboutMessage(value: string) {
     <section class="step-grid">
       <div class="step-panel step-panel--primary">
         <div class="section-kicker">STEP 01</div>
-        <h2>填写基本信息生成大纲</h2>
-        <p>输入论文主题后，系统会先生成可编辑的大纲结构。</p>
+        <h2>配置论文参数并生成大纲</h2>
+        <p>标题已经确认，完善生成参数后系统会生成可编辑的大纲结构。</p>
 
         <div class="console-panel">
           <div class="console-head">
@@ -105,7 +106,7 @@ function updateAboutMessage(value: string) {
 
       <div class="step-panel form-panel">
         <a-form layout="vertical">
-          <a-form-item label="论文题目" required>
+          <a-form-item v-if="!hideTitle" label="论文题目" required>
             <a-input
               :value="form.title"
               size="large"

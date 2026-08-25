@@ -100,6 +100,25 @@ export interface PaperOrderDetail extends PaperOrderItem {
   task_id?: null | string;
 }
 
+export type UnifiedOrderDocumentType =
+  | 'literature_review'
+  | 'proposal_report'
+  | 'task_book'
+  | 'thesis';
+
+export interface UnifiedOrderItem {
+  completed_at?: null | string;
+  created_at: string;
+  document_type: UnifiedOrderDocumentType;
+  error_message?: null | string;
+  has_file: number;
+  order_sn: string;
+  paid_points: number;
+  refunded_points: number;
+  status: string;
+  title: string;
+}
+
 export interface PointLedger {
   balance_after: number;
   change_type: string;
@@ -287,6 +306,15 @@ export function listMyPaperOrders(page = 1, pageSize = 10) {
   return requestClient.get<PageResult<PaperOrderItem>>('/thesis/orders', {
     params: { page, page_size: pageSize },
   });
+}
+
+export function listUnifiedOrders(page = 1, pageSize = 10) {
+  return requestClient.get<PageResult<UnifiedOrderItem>>(
+    '/thesis/orders/unified',
+    {
+      params: { page, page_size: pageSize },
+    },
+  );
 }
 
 export function getMyPaperOrderDetail(order_sn: string) {

@@ -10,6 +10,8 @@ import type {
   WorkflowStep,
 } from './components/types';
 
+import type { ThesisMaterialDocumentType } from '#/api';
+
 import { computed, onUnmounted, reactive, ref } from 'vue';
 
 import { confirm, Page } from '@vben/common-ui';
@@ -30,7 +32,10 @@ import {
 
 import BasicInfoStep from './components/BasicInfoStep.vue';
 import GenerationStatusStep from './components/GenerationStatusStep.vue';
+import MaterialGenerateFlow from './components/MaterialGenerateFlow.vue';
 import OutlineEditorStep from './components/OutlineEditorStep.vue';
+
+type GenerateDocumentType = 'thesis' | ThesisMaterialDocumentType;
 
 const OUTLINE_PROGRESS_DURATION = 20_000;
 const PAPER_PROGRESS_DURATION = 5 * 60_000;
@@ -54,6 +59,8 @@ const titleRecommendationOpen = ref(false);
 const titleRecommendationLoading = ref(false);
 const titleRecommendationDescription = ref('');
 const recommendedTitles = ref<string[]>([]);
+const workflowStarted = ref(false);
+const selectedDocumentType = ref<GenerateDocumentType>('thesis');
 
 let outlineProgressTimer: null | ReturnType<typeof setInterval> = null;
 let paperProgressTimer: null | ReturnType<typeof setInterval> = null;
@@ -81,12 +88,48 @@ const quoteOptions = ['标注', '不标注'].map((value) => ({
 }));
 
 const stepIndexMap: Record<WorkflowStep, number> = {
-  config: 0,
-  outline: 1,
-  result: 2,
+  config: 1,
+  outline: 2,
+  result: 3,
 };
 
-const workflowTips = ['大纲规划', '结构编辑', '正文生成'];
+const documentTypeOptions: Array<{
+  description: string;
+  icon: string;
+  label: string;
+  value: GenerateDocumentType;
+}> = [
+  {
+    description: '先生成可编辑大纲，再生成完整论文 Word 文档',
+    icon: 'lucide:file-text',
+    label: '论文',
+    value: 'thesis',
+  },
+  {
+    description: '生成研究背景、目标、内容、方法与进度计划',
+    icon: 'lucide:clipboard-pen-line',
+    label: '开题报告',
+    value: 'proposal_report',
+  },
+  {
+    description: '围绕研究主题梳理国内外成果与研究趋势',
+    icon: 'lucide:library-big',
+    label: '文献综述',
+    value: 'literature_review',
+  },
+  {
+    description: '生成毕业设计目标、任务要求与阶段安排',
+    icon: 'lucide:list-checks',
+    label: '任务书',
+    value: 'task_book',
+  },
+];
+
+const workflowTips = computed(() =>
+  selectedDocumentType.value === 'thesis'
+    ? ['标题与类型', '大纲规划', '结构编辑', '正文生成']
+    : ['标题与类型', '材料配置', '文档生成'],
+);
 
 const statusTextMap: Record<string, string> = {
   completed: '已完成',
@@ -97,7 +140,18 @@ const statusTextMap: Record<string, string> = {
   refunded: '已退款',
 };
 
-const currentStep = computed(() => stepIndexMap[step.value]);
+const taskStep = ref(1);
+const currentStep = computed(() => {
+  if (!workflowStarted.value) return 0;
+  if (selectedDocumentType.value !== 'thesis') return taskStep.value;
+  return stepIndexMap[step.value];
+});
+const selectedDocumentTypeLabel = computed(
+  () =>
+    documentTypeOptions.find(
+      (item) => item.value === selectedDocumentType.value,
+    )?.label || '文档',
+);
 const outlineSectionCount = computed(() =>
   outline.value.reduce((total, chapter) => total + chapter.sections.length, 0),
 );
@@ -282,14 +336,26 @@ function selectRecommendedTitle(title: string) {
 
 function validateConfig() {
   if (!form.title.trim()) {
-    message.warning('请输入论文题目');
+    message.warning('请输入文档题目');
     return false;
   }
   if (form.title.trim().length < 2) {
-    message.warning('论文题目至少 2 个字');
+    message.warning('文档题目至少 2 个字');
     return false;
   }
   return true;
+}
+
+function startWorkflow() {
+  if (!validateConfig()) return;
+  form.title = form.title.trim();
+  workflowStarted.value = true;
+  taskStep.value = 1;
+}
+
+function resetWorkflowSelection() {
+  workflowStarted.value = false;
+  taskStep.value = 0;
 }
 
 function getWorkflowTipClass(index: number) {
@@ -534,10 +600,89 @@ onUnmounted(() => {
       </header>
 
       <section class="workflow-board">
+        <div v-if="!workflowStarted" class="document-selector">
+          <div class="selector-heading">
+            <div>
+              <span class="selector-kicker">START YOUR DOCUMENT</span>
+              <h1>从一个题目开始</h1>
+              <p>先确认研究题目，再选择本次需要生成的论文或论文材料。</p>
+            </div>
+            <a-button size="large" type="primary" @click="openTitleRecommendation">
+              <template #icon>
+                <IconifyIcon icon="lucide:wand-sparkles" />
+              </template>
+              AI 智能选题
+            </a-button>
+          </div>
+
+          <a-form class="selector-form" layout="vertical">
+            <a-form-item label="文档题目" required>
+              <a-input
+                v-model:value="form.title"
+                :maxlength="200"
+                placeholder="例如：基于深度学习的图像识别技术研究"
+                show-count
+                size="large"
+                @press-enter="startWorkflow"
+              />
+            </a-form-item>
+
+            <a-form-item label="选择生成类型" required>
+              <div class="document-type-grid">
+                <button
+                  v-for="item in documentTypeOptions"
+                  :key="item.value"
+                  class="document-type-card"
+                  :class="{
+                    'document-type-card--active':
+                      selectedDocumentType === item.value,
+                  }"
+                  type="button"
+                  @click="selectedDocumentType = item.value"
+                >
+                  <span class="document-type-icon">
+                    <IconifyIcon :icon="item.icon" />
+                  </span>
+                  <span class="document-type-copy">
+                    <strong>{{ item.label }}</strong>
+                    <small>{{ item.description }}</small>
+                  </span>
+                  <IconifyIcon
+                    class="document-type-check"
+                    icon="lucide:circle-check"
+                  />
+                </button>
+              </div>
+            </a-form-item>
+
+            <div class="selector-actions">
+              <a-button size="large" type="primary" @click="startWorkflow">
+                继续配置{{ selectedDocumentTypeLabel }}
+                <template #icon>
+                  <IconifyIcon icon="lucide:arrow-right" />
+                </template>
+              </a-button>
+            </div>
+          </a-form>
+        </div>
+
+        <template v-else>
+          <div
+            v-if="selectedDocumentType !== 'thesis' || step === 'config'"
+            class="selected-document-summary"
+          >
+            <div>
+              <a-tag color="cyan">{{ selectedDocumentTypeLabel }}</a-tag>
+              <strong>{{ form.title }}</strong>
+            </div>
+            <a-button @click="resetWorkflowSelection">修改题目或类型</a-button>
+          </div>
+
         <BasicInfoStep
-          v-if="step === 'config'"
+          v-if="selectedDocumentType === 'thesis' && step === 'config'"
           :code-type-options="codeTypeOptions"
           :form="form"
+          hide-title
           :loading="outlineLoading"
           :progress="outlineProgress"
           :quote-options="quoteOptions"
@@ -548,7 +693,7 @@ onUnmounted(() => {
         />
 
         <OutlineEditorStep
-          v-else-if="step === 'outline'"
+          v-else-if="selectedDocumentType === 'thesis' && step === 'outline'"
           :abstract-text="outlineAbstract"
           :chapter-count="outline.length"
           :keywords="outlineKeywords"
@@ -569,7 +714,7 @@ onUnmounted(() => {
         />
 
         <GenerationStatusStep
-          v-else
+          v-else-if="selectedDocumentType === 'thesis'"
           :can-download="canDownloadPaper"
           :copy-loading="copyLoading"
           :download-loading="downloadLoading"
@@ -585,6 +730,15 @@ onUnmounted(() => {
           @download="downloadPaper"
           @refresh="() => refreshStatus()"
         />
+
+          <MaterialGenerateFlow
+            v-else
+            :document-type="selectedDocumentType"
+            :title="form.title"
+            @configuring="taskStep = 1"
+            @submitted="taskStep = 2"
+          />
+        </template>
       </section>
     </div>
 
@@ -794,6 +948,145 @@ onUnmounted(() => {
   border-radius: 8px;
   box-shadow: 0 24px 70px rgb(37 92 126 / 13%);
   backdrop-filter: blur(18px);
+}
+
+.document-selector {
+  width: min(1040px, 100%);
+  padding: 18px 8px;
+  margin: 0 auto;
+}
+
+.selector-heading {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 30px;
+}
+
+.selector-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0aa895;
+}
+
+.selector-heading h1 {
+  margin: 8px 0 0;
+  font-size: 32px;
+  color: #13243a;
+}
+
+.selector-heading p {
+  margin: 10px 0 0;
+  color: #5f7388;
+}
+
+.selector-form {
+  padding: 28px;
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid rgb(174 211 224 / 66%);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgb(38 102 138 / 9%);
+}
+
+.document-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.document-type-card {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 22px;
+  gap: 14px;
+  align-items: center;
+  min-height: 108px;
+  padding: 18px;
+  color: #314458;
+  text-align: left;
+  cursor: pointer;
+  background: #f9fcfe;
+  border: 1px solid rgb(174 211 224 / 76%);
+  border-radius: 9px;
+  transition: 0.2s ease;
+}
+
+.document-type-card:hover,
+.document-type-card--active {
+  color: #075d72;
+  background: linear-gradient(135deg, #effffb, #f4f8ff);
+  border-color: rgb(20 184 166 / 58%);
+  box-shadow: 0 12px 28px rgb(28 120 150 / 10%);
+  transform: translateY(-1px);
+}
+
+.document-type-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+  color: #0f8ca2;
+  background: rgb(20 184 166 / 12%);
+  border-radius: 10px;
+}
+
+.document-type-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.document-type-copy strong {
+  font-size: 16px;
+}
+
+.document-type-copy small {
+  line-height: 1.55;
+  color: #74889c;
+}
+
+.document-type-check {
+  color: #ccd8df;
+}
+
+.document-type-card--active .document-type-check {
+  color: #14b8a6;
+}
+
+.selector-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 26px;
+}
+
+.selected-document-summary {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  background: rgb(239 255 251 / 76%);
+  border: 1px solid rgb(20 184 166 / 24%);
+  border-radius: 8px;
+}
+
+.selected-document-summary > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .selector-heading,
+  .selected-document-summary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .document-type-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .title-recommendation-intro {
