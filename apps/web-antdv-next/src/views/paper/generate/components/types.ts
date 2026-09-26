@@ -3,7 +3,6 @@ export interface GenerateFormState {
   chinese_reference_count: number;
   english_reference_count: number;
   target_word_count: number;
-  three_level: boolean;
   title: string;
 }
 

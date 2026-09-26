@@ -158,7 +158,6 @@ async function submit() {
       thesis_config: {
         aboutmsg: props.thesisConfig.about_msg,
         target_word_count: props.thesisConfig.target_word_count,
-        three_level: props.thesisConfig.three_level,
       },
       title: props.title.trim(),
     };
@@ -204,12 +203,10 @@ onBeforeUnmount(stopPolling);
           </span>
           <div>
             <strong>生成{{ currentProduct?.name || '论文材料' }}</strong>
-            <small
-              >{{
+            <small>{{
                 materialCopy.description
               }}
-              已确认的大纲将用于生成本文档。</small
-            >
+              已确认的大纲将用于生成本文档。</small>
           </div>
         </div>
       </template>

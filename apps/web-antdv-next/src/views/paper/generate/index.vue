@@ -72,7 +72,6 @@ const form = reactive<GenerateFormState>({
   chinese_reference_count: 25,
   english_reference_count: 0,
   target_word_count: 8000,
-  three_level: false,
   title: '',
 });
 
@@ -376,7 +375,7 @@ function createBlankSubsection(): PaperOutlineSubsection {
 function createBlankSection(): PaperOutlineSection {
   return {
     ...createBlankSubsection(),
-    subsections: form.three_level ? [createBlankSubsection()] : [],
+    subsections: [],
   };
 }
 
@@ -431,14 +430,12 @@ function validateOutline() {
   const hasInvalidSubsection = outline.value.some((chapter) =>
     chapter.sections.some(
       (section) =>
-        form.three_level &&
-        (section.subsections.length === 0 ||
-          section.subsections.some((subsection) => !subsection.name.trim())),
+        section.subsections.some((subsection) => !subsection.name.trim()),
     ),
   );
   if (hasInvalidSubsection) {
     message.warning(
-      '三级大纲下每个二级小节至少保留一个三级小节，且标题不能为空',
+      '三级小节标题不能为空',
     );
     return false;
   }
@@ -455,7 +452,6 @@ async function generateOutline() {
       chinese_reference_count: form.chinese_reference_count,
       english_reference_count: form.english_reference_count,
       target_word_count: form.target_word_count,
-      three_level: form.three_level,
       title: form.title.trim(),
     });
     outlineRecordId.value = result.record_id;
@@ -681,7 +677,6 @@ onUnmounted(() => {
             :outline-record-id="outlineRecordId"
             :section-count="outlineSectionCount"
             :subsection-count="outlineSubsectionCount"
-            :three-level="form.three_level"
             @add-chapter="addChapter"
             @add-section="addSection"
             @add-subsection="addSubsection"
@@ -742,9 +737,9 @@ onUnmounted(() => {
               {{ form.english_reference_count }} 篇。
             </p>
             <div class="selector-actions">
-              <a-button @click="selectedDocumentType = null"
-                >更换文档类型</a-button
-              >
+              <a-button @click="selectedDocumentType = null">
+更换文档类型
+</a-button>
               <a-button
                 :loading="submitLoading"
                 type="primary"
@@ -775,9 +770,9 @@ onUnmounted(() => {
 
           <div v-else class="material-workflow">
             <div v-if="step === 'type'" class="material-workflow-actions">
-              <a-button @click="selectedDocumentType = null"
-                >更换文档类型</a-button
-              >
+              <a-button @click="selectedDocumentType = null">
+更换文档类型
+</a-button>
               <a-button @click="backToOutline">返回编辑大纲</a-button>
             </div>
             <MaterialGenerateFlow

@@ -15,7 +15,6 @@ defineProps<{
   outlineRecordId?: number;
   sectionCount: number;
   subsectionCount: number;
-  threeLevel: boolean;
 }>();
 
 defineEmits<{
@@ -49,7 +48,7 @@ defineEmits<{
           <strong>{{ sectionCount }}</strong>
         </div>
         <div>
-          <span>三级小节</span>
+          <span>三级小节（按需添加）</span>
           <strong>{{ subsectionCount }}</strong>
         </div>
       </div>
@@ -148,7 +147,6 @@ defineEmits<{
               placeholder="本节写作要点"
             />
             <div
-              v-if="threeLevel || section.subsections.length > 0"
               class="subsection-list"
             >
               <div class="subsection-toolbar">
@@ -179,7 +177,6 @@ defineEmits<{
                 <a-button
                   danger
                   size="small"
-                  :disabled="threeLevel && section.subsections.length <= 1"
                   @click="$emit('removeSubsection', section, subsectionIndex)"
                 >
                   <template #icon>

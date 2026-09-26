@@ -36,10 +36,6 @@ function updateEnglishCount(value: null | number) {
   updateForm({ english_reference_count: value ?? 0 });
 }
 
-function updateThreeLevel(checked: boolean) {
-  updateForm({ three_level: checked });
-}
-
 function updateAboutMessage(value: string) {
   updateForm({ about_msg: value });
 }
@@ -138,20 +134,11 @@ function updateAboutMessage(value: string) {
                 @update:value="updateEnglishCount"
               />
             </a-form-item>
-            <a-form-item label="三级大纲">
-              <div class="switch-row">
-                <a-switch
-                  :checked="form.three_level"
-                  @update:checked="updateThreeLevel"
-                />
-                <span>{{ form.three_level ? '开启' : '关闭' }}</span>
-              </div>
-            </a-form-item>
           </div>
 
           <p class="reference-hint">
             正文默认标注文献；代码内容由 AI 根据课题需要安排。中英文文献合计
-            1–100 篇。
+            1–100 篇。大纲默认两级，AI 会根据篇幅和内容需要局部细化到三级。
           </p>
 
           <a-form-item label="写作方向补充">
@@ -277,14 +264,6 @@ function updateAboutMessage(value: string) {
   background: transparent;
 }
 
-.form-panel :deep(.ant-switch) {
-  background: #c5d1dc;
-}
-
-.form-panel :deep(.ant-switch-checked) {
-  background: #13c2c2;
-}
-
 .section-kicker {
   margin-bottom: 18px;
   font-size: 12px;
@@ -385,14 +364,6 @@ p {
 
 .full-input {
   width: 100%;
-}
-
-.switch-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  min-height: 32px;
-  color: #4f6478;
 }
 
 .progress-block {

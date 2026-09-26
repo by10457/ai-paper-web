@@ -142,8 +142,7 @@ Content-Type: application/json
   "target_word_count": 8000,
   "chinese_reference_count": 20,
   "english_reference_count": 5,
-  "about_msg": "侧重算法应用与实验分析",
-  "three_level": false
+  "about_msg": "侧重算法应用与实验分析"
 }</pre>
 
                 <a-typography-title :level="4">3. 创建并支付订单</a-typography-title>
