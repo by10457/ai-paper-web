@@ -33,7 +33,7 @@ defineEmits<{
 <template>
   <section class="outline-layout">
     <aside class="outline-aside">
-      <div class="section-kicker">STEP 02</div>
+      <div class="section-kicker">STEP 03</div>
       <h2>编辑大纲</h2>
       <div class="metric-list">
         <div>
@@ -55,7 +55,7 @@ defineEmits<{
       </div>
       <div v-if="keywords || abstractText" class="summary-panel">
         <span>{{ keywords ? `关键词：${keywords}` : '大纲摘要' }}</span>
-        <p>{{ abstractText || '可继续调整大纲后生成论文。' }}</p>
+        <p>{{ abstractText || '可继续调整大纲后选择要生成的文档。' }}</p>
       </div>
     </aside>
 
@@ -63,7 +63,7 @@ defineEmits<{
       <div class="toolbar">
         <div>
           <h3>论文结构</h3>
-          <span>确认章节层级和每节写作要点</span>
+          <span>确认章节层级和每节写作要点，随后选择文档类型</span>
         </div>
         <a-space wrap>
           <a-button @click="$emit('back')">
@@ -82,7 +82,7 @@ defineEmits<{
             <template #icon>
               <IconifyIcon icon="lucide:file-check-2" />
             </template>
-            确认生成论文
+            确认大纲，选择文档
           </a-button>
         </a-space>
       </div>

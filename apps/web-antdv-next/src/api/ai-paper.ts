@@ -229,7 +229,9 @@ export function recommendPaperTitles(content: string) {
 
 export function createPaperOutline(data: {
   about_msg?: string;
-  form_params: Record<string, any>;
+  chinese_reference_count: number;
+  english_reference_count: number;
+  target_word_count: number;
   three_level?: boolean;
   title: string;
 }) {
@@ -347,7 +349,9 @@ export function resetApiToken() {
 }
 
 export function getThesisMaterialProducts() {
-  return requestClient.get<ThesisMaterialProducts>('/thesis-materials/products');
+  return requestClient.get<ThesisMaterialProducts>(
+    '/thesis-materials/products',
+  );
 }
 
 export function submitThesisMaterialDocument(
@@ -359,23 +363,34 @@ export function submitThesisMaterialDocument(
     proposal_report: '/thesis-materials/proposal-reports',
     task_book: '/thesis-materials/task-books',
   };
-  return requestClient.post<ThesisMaterialSubmitResult>(endpointMap[documentType], data, {
-    headers: { 'Idempotency-Key': crypto.randomUUID() },
-  });
+  return requestClient.post<ThesisMaterialSubmitResult>(
+    endpointMap[documentType],
+    data,
+    {
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+    },
+  );
 }
 
 export function getThesisMaterialTask(taskId: string) {
-  return requestClient.get<ThesisMaterialTask>(`/thesis-materials/tasks/${taskId}`);
+  return requestClient.get<ThesisMaterialTask>(
+    `/thesis-materials/tasks/${taskId}`,
+  );
 }
 
 export function listThesisMaterialOrders(page = 1, pageSize = 10) {
-  return requestClient.get<PageResult<ThesisMaterialOrderItem>>('/thesis-materials/orders', {
-    params: { page, page_size: pageSize },
-  });
+  return requestClient.get<PageResult<ThesisMaterialOrderItem>>(
+    '/thesis-materials/orders',
+    {
+      params: { page, page_size: pageSize },
+    },
+  );
 }
 
 export function getThesisMaterialOrder(orderSn: string) {
-  return requestClient.get<ThesisMaterialOrderDetail>(`/thesis-materials/orders/${orderSn}`);
+  return requestClient.get<ThesisMaterialOrderDetail>(
+    `/thesis-materials/orders/${orderSn}`,
+  );
 }
 
 export async function streamThesisMaterialTask(
@@ -384,14 +399,17 @@ export async function streamThesisMaterialTask(
   signal?: AbortSignal,
 ) {
   const accessStore = useAccessStore();
-  const response = await fetch(`${apiURL}/thesis-materials/tasks/${encodeURIComponent(taskId)}/events`, {
-    headers: {
-      Authorization: accessStore.accessToken
-        ? `Bearer ${accessStore.accessToken}`
-        : '',
+  const response = await fetch(
+    `${apiURL}/thesis-materials/tasks/${encodeURIComponent(taskId)}/events`,
+    {
+      headers: {
+        Authorization: accessStore.accessToken
+          ? `Bearer ${accessStore.accessToken}`
+          : '',
+      },
+      signal,
     },
-    signal,
-  });
+  );
   if (!response.ok || !response.body) {
     throw new Error(`论文材料生成状态连接失败：${response.status}`);
   }
@@ -405,7 +423,9 @@ export async function streamThesisMaterialTask(
     const chunks = buffer.split('\n\n');
     buffer = chunks.pop() || '';
     for (const chunk of chunks) {
-      const dataLine = chunk.split('\n').find((line) => line.startsWith('data:'));
+      const dataLine = chunk
+        .split('\n')
+        .find((line) => line.startsWith('data:'));
       const payload = dataLine?.slice(5).trim();
       if (payload) onStatus(JSON.parse(payload) as ThesisMaterialTask);
     }

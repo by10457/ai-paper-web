@@ -1,5 +1,8 @@
 <script lang="ts" setup>
+import type { GenerateFormState } from './types';
+
 import type {
+  PaperOutlineChapter,
   ThesisMaterialDocumentType,
   ThesisMaterialProduct,
   ThesisMaterialTask,
@@ -19,6 +22,8 @@ import {
 
 const props = defineProps<{
   documentType: ThesisMaterialDocumentType;
+  sourceOutline: PaperOutlineChapter[];
+  thesisConfig: GenerateFormState;
   title: string;
 }>();
 const emit = defineEmits<{ configuring: []; submitted: [] }>();
@@ -29,21 +34,27 @@ const task = ref<null | ThesisMaterialTask>(null);
 let pollTimer: null | ReturnType<typeof setInterval> = null;
 
 const form = reactive({
-  college: '',
   direction: '',
   end_date: '',
-  major: '',
-  name: '',
-  reference_count: 15,
-  school: '',
+  chinese_reference_count: props.thesisConfig.chinese_reference_count,
+  english_reference_count: props.thesisConfig.english_reference_count,
   start_date: '',
-  student_no: '',
   target_word_count: 4000,
 });
 
 const currentProduct = computed(() =>
   products.value.find((item) => item.document_type === props.documentType),
 );
+const wordLimits = computed(() =>
+  props.documentType === 'proposal_report'
+    ? { max: 12_000, min: 2500 }
+    : { max: 20_000, min: 3500 },
+);
+const referenceLimits = computed(() => {
+  if (props.documentType === 'proposal_report') return { max: 40, min: 8 };
+  if (props.documentType === 'literature_review') return { max: 60, min: 12 };
+  return { max: 30, min: 5 };
+});
 const materialCopy = computed(() => {
   const copyMap: Record<
     ThesisMaterialDocumentType,
@@ -102,9 +113,6 @@ async function loadProducts() {
   if (product?.default_word_count) {
     form.target_word_count = product.default_word_count;
   }
-  if (product?.default_reference_count) {
-    form.reference_count = product.default_reference_count;
-  }
 }
 
 function stopPolling() {
@@ -127,21 +135,30 @@ function startPolling() {
 }
 
 async function submit() {
+  const total = form.chinese_reference_count + form.english_reference_count;
+  if (total < referenceLimits.value.min || total > referenceLimits.value.max) {
+    message.warning(
+      `中英文参考文献合计需为 ${referenceLimits.value.min}–${referenceLimits.value.max} 篇`,
+    );
+    return;
+  }
   submitting.value = true;
   try {
     const payload: Record<string, any> = {
-      reference_options: { target_count: form.reference_count },
+      reference_options: {
+        chinese_reference_count: form.chinese_reference_count,
+        english_reference_count: form.english_reference_count,
+      },
       research_context: { direction: form.direction || undefined },
       schedule_options: {
         end_date: form.end_date || undefined,
         start_date: form.start_date || undefined,
       },
-      student_profile: {
-        college: form.college || undefined,
-        major: form.major || undefined,
-        name: form.name || undefined,
-        school: form.school || undefined,
-        student_no: form.student_no || undefined,
+      source_outline: props.sourceOutline,
+      thesis_config: {
+        aboutmsg: props.thesisConfig.about_msg,
+        target_word_count: props.thesisConfig.target_word_count,
+        three_level: props.thesisConfig.three_level,
       },
       title: props.title.trim(),
     };
@@ -187,7 +204,12 @@ onBeforeUnmount(stopPolling);
           </span>
           <div>
             <strong>生成{{ currentProduct?.name || '论文材料' }}</strong>
-            <small>{{ materialCopy.description }}</small>
+            <small
+              >{{
+                materialCopy.description
+              }}
+              已确认的大纲将用于生成本文档。</small
+            >
           </div>
         </div>
       </template>
@@ -218,7 +240,12 @@ onBeforeUnmount(stopPolling);
           :status="task.status === 'failed' ? 'exception' : undefined"
         />
         <a-space>
-          <a-button v-if="canDownload" size="large" type="primary" @click="download">
+          <a-button
+            v-if="canDownload"
+            size="large"
+            type="primary"
+            @click="download"
+          >
             下载 Word 文档
           </a-button>
           <a-button
@@ -260,36 +287,44 @@ onBeforeUnmount(stopPolling);
             </div>
           </div>
           <a-row :gutter="20">
-            <a-col
-              v-if="documentType !== 'task_book'"
-              :md="documentType === 'literature_review' ? 12 : 8"
-              :xs="24"
-            >
+            <a-col v-if="documentType !== 'task_book'" :md="8" :xs="24">
               <a-form-item label="目标字数">
                 <a-input-number
                   v-model:value="form.target_word_count"
-                  :max="20000"
-                  :min="2500"
+                  :max="wordLimits.max"
+                  :min="wordLimits.min"
                   class="w-full"
                 />
               </a-form-item>
             </a-col>
-            <a-col
-              :md="documentType === 'proposal_report' ? 8 : 12"
-              :xs="24"
-            >
-              <a-form-item label="参考资料数量">
+            <a-col :md="8" :xs="24">
+              <a-form-item label="中文参考文献（篇）">
                 <a-input-number
-                  v-model:value="form.reference_count"
-                  :max="60"
-                  :min="5"
+                  v-model:value="form.chinese_reference_count"
+                  :max="referenceLimits.max"
+                  :min="0"
+                  :precision="0"
+                  class="w-full"
+                />
+              </a-form-item>
+            </a-col>
+            <a-col :md="8" :xs="24">
+              <a-form-item
+                label="英文参考文献（篇）"
+                :help="`合计 ${referenceLimits.min}–${referenceLimits.max} 篇，正文默认标注`"
+              >
+                <a-input-number
+                  v-model:value="form.english_reference_count"
+                  :max="referenceLimits.max"
+                  :min="0"
+                  :precision="0"
                   class="w-full"
                 />
               </a-form-item>
             </a-col>
             <a-col
               v-if="documentType !== 'literature_review'"
-              :md="documentType === 'proposal_report' ? 8 : 12"
+              :md="documentType === 'proposal_report' ? 24 : 8"
               :xs="24"
             >
               <a-form-item :label="materialCopy.scheduleLabel">
@@ -310,41 +345,12 @@ onBeforeUnmount(stopPolling);
           </a-row>
         </section>
 
-        <section class="material-form-section material-form-section--optional">
-          <a-collapse ghost>
-            <a-collapse-panel key="profile">
-              <template #header>
-                <div class="optional-heading">
-                  <IconifyIcon icon="lucide:graduation-cap" />
-                  <span>
-                    <strong>封面信息</strong>
-                    <small>选填；未填写的内容将使用通用占位符</small>
-                  </span>
-                </div>
-              </template>
-              <a-row :gutter="16">
-                <a-col
-                  v-for="field in [
-                    ['school', '学校'],
-                    ['college', '学院'],
-                    ['name', '姓名'],
-                    ['student_no', '学号'],
-                    ['major', '专业'],
-                  ]"
-                  :key="field[0]"
-                  :sm="12"
-                  :xs="24"
-                >
-                  <a-form-item :label="field[1]">
-                    <a-input
-                      v-model:value="form[field[0] as keyof typeof form]"
-                    />
-                  </a-form-item>
-                </a-col>
-              </a-row>
-            </a-collapse-panel>
-          </a-collapse>
-        </section>
+        <p
+          v-if="documentType !== 'literature_review'"
+          class="material-profile-hint"
+        >
+          封面个人信息将在 Word 中标为“待补充”，下载后自行填写。
+        </p>
 
         <div class="material-submit-row">
           <span v-if="currentProduct">
@@ -410,8 +416,7 @@ onBeforeUnmount(stopPolling);
 }
 
 .material-card-heading small,
-.material-section-heading small,
-.optional-heading small {
+.material-section-heading small {
   font-size: 13px;
   font-weight: 400;
   line-height: 1.5;
@@ -462,24 +467,10 @@ onBeforeUnmount(stopPolling);
   margin-bottom: 0;
 }
 
-.material-form-section--optional {
-  padding-bottom: 4px;
-}
-
-.material-form-section--optional :deep(.ant-collapse-header) {
-  padding-inline: 0 !important;
-}
-
-.optional-heading {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  color: #315469;
-}
-
-.optional-heading > span {
-  display: grid;
-  gap: 2px;
+.material-profile-hint {
+  margin: 22px 0 0;
+  font-size: 13px;
+  color: #74889c;
 }
 
 .material-submit-row {

@@ -60,7 +60,7 @@ const titleRecommendationLoading = ref(false);
 const titleRecommendationDescription = ref('');
 const recommendedTitles = ref<string[]>([]);
 const workflowStarted = ref(false);
-const selectedDocumentType = ref<GenerateDocumentType>('thesis');
+const selectedDocumentType = ref<GenerateDocumentType | null>(null);
 
 let outlineProgressTimer: null | ReturnType<typeof setInterval> = null;
 let paperProgressTimer: null | ReturnType<typeof setInterval> = null;
@@ -69,28 +69,18 @@ let statusStreamController: AbortController | null = null;
 
 const form = reactive<GenerateFormState>({
   about_msg: '',
-  codetype: '否',
-  language: '否',
+  chinese_reference_count: 25,
+  english_reference_count: 0,
   target_word_count: 8000,
   three_level: false,
   title: '',
-  wxnum: 25,
-  wxquote: '标注',
 });
-
-const codeTypeOptions = ['否', 'Python', 'Java', 'JavaScript', 'C++'].map(
-  (value) => ({ label: value, value }),
-);
-const yesNoOptions = ['否', '是'].map((value) => ({ label: value, value }));
-const quoteOptions = ['标注', '不标注'].map((value) => ({
-  label: value,
-  value,
-}));
 
 const stepIndexMap: Record<WorkflowStep, number> = {
   config: 1,
   outline: 2,
-  result: 3,
+  type: 3,
+  result: 4,
 };
 
 const documentTypeOptions: Array<{
@@ -100,7 +90,7 @@ const documentTypeOptions: Array<{
   value: GenerateDocumentType;
 }> = [
   {
-    description: '先生成可编辑大纲，再生成完整论文 Word 文档',
+    description: '按已确认的大纲生成完整论文 Word 文档',
     icon: 'lucide:file-text',
     label: '论文',
     value: 'thesis',
@@ -125,11 +115,13 @@ const documentTypeOptions: Array<{
   },
 ];
 
-const workflowTips = computed(() =>
-  selectedDocumentType.value === 'thesis'
-    ? ['标题与类型', '大纲规划', '结构编辑', '正文生成']
-    : ['标题与类型', '材料配置', '文档生成'],
-);
+const workflowTips = [
+  '论文题目',
+  '大纲配置',
+  '编辑大纲',
+  '选择文档',
+  '文档生成',
+];
 
 const statusTextMap: Record<string, string> = {
   completed: '已完成',
@@ -140,10 +132,8 @@ const statusTextMap: Record<string, string> = {
   refunded: '已退款',
 };
 
-const taskStep = ref(1);
 const currentStep = computed(() => {
   if (!workflowStarted.value) return 0;
-  if (selectedDocumentType.value !== 'thesis') return taskStep.value;
   return stepIndexMap[step.value];
 });
 const selectedDocumentTypeLabel = computed(
@@ -343,6 +333,11 @@ function validateConfig() {
     message.warning('文档题目至少 2 个字');
     return false;
   }
+  const total = form.chinese_reference_count + form.english_reference_count;
+  if (total < 1 || total > 100) {
+    message.warning('中英文参考文献合计需为 1–100 篇');
+    return false;
+  }
   return true;
 }
 
@@ -350,12 +345,17 @@ function startWorkflow() {
   if (!validateConfig()) return;
   form.title = form.title.trim();
   workflowStarted.value = true;
-  taskStep.value = 1;
+  step.value = 'config';
 }
 
 function resetWorkflowSelection() {
   workflowStarted.value = false;
-  taskStep.value = 0;
+  step.value = 'config';
+  selectedDocumentType.value = null;
+  outlineRecordId.value = undefined;
+  outline.value = [];
+  outlineAbstract.value = '';
+  outlineKeywords.value = '';
 }
 
 function getWorkflowTipClass(index: number) {
@@ -437,7 +437,9 @@ function validateOutline() {
     ),
   );
   if (hasInvalidSubsection) {
-    message.warning('三级大纲下每个二级小节至少保留一个三级小节，且标题不能为空');
+    message.warning(
+      '三级大纲下每个二级小节至少保留一个三级小节，且标题不能为空',
+    );
     return false;
   }
   return true;
@@ -450,13 +452,9 @@ async function generateOutline() {
   try {
     const result = await createPaperOutline({
       about_msg: form.about_msg.trim(),
-      form_params: {
-        codetype: form.codetype,
-        language: form.language,
-        lengthnum: form.target_word_count,
-        wxnum: form.wxnum,
-        wxquote: form.wxquote,
-      },
+      chinese_reference_count: form.chinese_reference_count,
+      english_reference_count: form.english_reference_count,
+      target_word_count: form.target_word_count,
       three_level: form.three_level,
       title: form.title.trim(),
     });
@@ -470,6 +468,7 @@ async function generateOutline() {
     }));
     outlineAbstract.value = result.abstract;
     outlineKeywords.value = result.keywords;
+    selectedDocumentType.value = null;
     resetResultState();
     stopOutlineProgress(true);
     step.value = 'outline';
@@ -480,6 +479,11 @@ async function generateOutline() {
   } finally {
     outlineLoading.value = false;
   }
+}
+
+function confirmOutline() {
+  if (!validateOutline()) return;
+  step.value = 'type';
 }
 
 async function confirmGeneratePaper() {
@@ -542,6 +546,7 @@ function backToConfig() {
 }
 
 function backToOutline() {
+  selectedDocumentType.value = null;
   step.value = 'outline';
 }
 
@@ -605,9 +610,13 @@ onUnmounted(() => {
             <div>
               <span class="selector-kicker">START YOUR DOCUMENT</span>
               <h1>从一个题目开始</h1>
-              <p>先确认研究题目，再选择本次需要生成的论文或论文材料。</p>
+              <p>确认研究题目后生成并编辑大纲，再选择要生成的文档。</p>
             </div>
-            <a-button size="large" type="primary" @click="openTitleRecommendation">
+            <a-button
+              size="large"
+              type="primary"
+              @click="openTitleRecommendation"
+            >
               <template #icon>
                 <IconifyIcon icon="lucide:wand-sparkles" />
               </template>
@@ -627,37 +636,9 @@ onUnmounted(() => {
               />
             </a-form-item>
 
-            <a-form-item label="选择生成类型" required>
-              <div class="document-type-grid">
-                <button
-                  v-for="item in documentTypeOptions"
-                  :key="item.value"
-                  class="document-type-card"
-                  :class="{
-                    'document-type-card--active':
-                      selectedDocumentType === item.value,
-                  }"
-                  type="button"
-                  @click="selectedDocumentType = item.value"
-                >
-                  <span class="document-type-icon">
-                    <IconifyIcon :icon="item.icon" />
-                  </span>
-                  <span class="document-type-copy">
-                    <strong>{{ item.label }}</strong>
-                    <small>{{ item.description }}</small>
-                  </span>
-                  <IconifyIcon
-                    class="document-type-check"
-                    icon="lucide:circle-check"
-                  />
-                </button>
-              </div>
-            </a-form-item>
-
             <div class="selector-actions">
               <a-button size="large" type="primary" @click="startWorkflow">
-                继续配置{{ selectedDocumentTypeLabel }}
+                继续配置大纲
                 <template #icon>
                   <IconifyIcon icon="lucide:arrow-right" />
                 </template>
@@ -667,77 +648,149 @@ onUnmounted(() => {
         </div>
 
         <template v-else>
-          <div
-            v-if="selectedDocumentType !== 'thesis' || step === 'config'"
-            class="selected-document-summary"
-          >
+          <div v-if="step !== 'result'" class="selected-document-summary">
             <div>
-              <a-tag color="cyan">{{ selectedDocumentTypeLabel }}</a-tag>
+              <a-tag color="cyan">
+                {{
+                  selectedDocumentType ? selectedDocumentTypeLabel : '论文大纲'
+                }}
+              </a-tag>
               <strong>{{ form.title }}</strong>
             </div>
-            <a-button @click="resetWorkflowSelection">修改题目或类型</a-button>
+            <a-button @click="resetWorkflowSelection">修改题目</a-button>
           </div>
 
-        <BasicInfoStep
-          v-if="selectedDocumentType === 'thesis' && step === 'config'"
-          :code-type-options="codeTypeOptions"
-          :form="form"
-          hide-title
-          :loading="outlineLoading"
-          :progress="outlineProgress"
-          :quote-options="quoteOptions"
-          :yes-no-options="yesNoOptions"
-          @change="updateForm"
-          @generate="generateOutline"
-          @recommend="openTitleRecommendation"
-        />
-
-        <OutlineEditorStep
-          v-else-if="selectedDocumentType === 'thesis' && step === 'outline'"
-          :abstract-text="outlineAbstract"
-          :chapter-count="outline.length"
-          :keywords="outlineKeywords"
-          :loading="submitLoading"
-          :outline="outline"
-          :outline-record-id="outlineRecordId"
-          :section-count="outlineSectionCount"
-          :subsection-count="outlineSubsectionCount"
-          :three-level="form.three_level"
-          @add-chapter="addChapter"
-          @add-section="addSection"
-          @add-subsection="addSubsection"
-          @back="backToConfig"
-          @generate="confirmGeneratePaper"
-          @remove-chapter="removeChapter"
-          @remove-section="removeSection"
-          @remove-subsection="removeSubsection"
-        />
-
-        <GenerationStatusStep
-          v-else-if="selectedDocumentType === 'thesis'"
-          :can-download="canDownloadPaper"
-          :copy-loading="copyLoading"
-          :download-loading="downloadLoading"
-          :order="order"
-          :price="price"
-          :progress="paperProgress"
-          :status="status"
-          :status-loading="statusLoading"
-          :status-message="statusMessage"
-          :status-text="statusText"
-          @back-to-outline="backToOutline"
-          @copy="copyDownloadUrl"
-          @download="downloadPaper"
-          @refresh="() => refreshStatus()"
-        />
-
-          <MaterialGenerateFlow
-            v-else
-            :document-type="selectedDocumentType"
-            :title="form.title"
-            @configuring="taskStep = 1"
-            @submitted="taskStep = 2"
+          <BasicInfoStep
+            v-if="step === 'config'"
+            :form="form"
+            hide-title
+            :loading="outlineLoading"
+            :progress="outlineProgress"
+            @change="updateForm"
+            @generate="generateOutline"
+            @recommend="openTitleRecommendation"
           />
+
+          <OutlineEditorStep
+            v-else-if="step === 'outline'"
+            :abstract-text="outlineAbstract"
+            :chapter-count="outline.length"
+            :keywords="outlineKeywords"
+            :loading="submitLoading"
+            :outline="outline"
+            :outline-record-id="outlineRecordId"
+            :section-count="outlineSectionCount"
+            :subsection-count="outlineSubsectionCount"
+            :three-level="form.three_level"
+            @add-chapter="addChapter"
+            @add-section="addSection"
+            @add-subsection="addSubsection"
+            @back="backToConfig"
+            @generate="confirmOutline"
+            @remove-chapter="removeChapter"
+            @remove-section="removeSection"
+            @remove-subsection="removeSubsection"
+          />
+
+          <div
+            v-else-if="step === 'type' && !selectedDocumentType"
+            class="document-selector"
+          >
+            <div class="selector-heading">
+              <div>
+                <span class="selector-kicker">OUTLINE READY</span>
+                <h1>选择要生成的文档</h1>
+                <p>
+                  已确认 {{ outline.length }} 个章节；所选文档将使用这份大纲。
+                </p>
+              </div>
+              <a-button @click="backToOutline">返回编辑大纲</a-button>
+            </div>
+            <div class="document-type-grid">
+              <button
+                v-for="item in documentTypeOptions"
+                :key="item.value"
+                class="document-type-card"
+                type="button"
+                @click="selectedDocumentType = item.value"
+              >
+                <span class="document-type-icon">
+                  <IconifyIcon :icon="item.icon" />
+                </span>
+                <span class="document-type-copy">
+                  <strong>{{ item.label }}</strong>
+                  <small>{{ item.description }}</small>
+                </span>
+                <IconifyIcon
+                  class="document-type-check"
+                  icon="lucide:arrow-right"
+                />
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-else-if="step === 'type' && selectedDocumentType === 'thesis'"
+            class="paper-submit-panel"
+          >
+            <span class="selector-kicker">论文正文</span>
+            <h2>根据已确认的大纲生成完整论文</h2>
+            <p>
+              共 {{ outline.length }} 章、{{ outlineSectionCount }} 节，目标
+              {{ form.target_word_count }} 字，中文文献
+              {{ form.chinese_reference_count }} 篇，英文文献
+              {{ form.english_reference_count }} 篇。
+            </p>
+            <div class="selector-actions">
+              <a-button @click="selectedDocumentType = null"
+                >更换文档类型</a-button
+              >
+              <a-button
+                :loading="submitLoading"
+                type="primary"
+                @click="confirmGeneratePaper"
+              >
+                确认生成论文
+              </a-button>
+            </div>
+          </div>
+
+          <GenerationStatusStep
+            v-else-if="step === 'result' && selectedDocumentType === 'thesis'"
+            :can-download="canDownloadPaper"
+            :copy-loading="copyLoading"
+            :download-loading="downloadLoading"
+            :order="order"
+            :price="price"
+            :progress="paperProgress"
+            :status="status"
+            :status-loading="statusLoading"
+            :status-message="statusMessage"
+            :status-text="statusText"
+            @back-to-outline="backToOutline"
+            @copy="copyDownloadUrl"
+            @download="downloadPaper"
+            @refresh="() => refreshStatus()"
+          />
+
+          <div v-else class="material-workflow">
+            <div v-if="step === 'type'" class="material-workflow-actions">
+              <a-button @click="selectedDocumentType = null"
+                >更换文档类型</a-button
+              >
+              <a-button @click="backToOutline">返回编辑大纲</a-button>
+            </div>
+            <MaterialGenerateFlow
+              :document-type="
+                selectedDocumentType as ThesisMaterialDocumentType
+              "
+              :source-outline="outline"
+              :thesis-config="form"
+              :title="form.title"
+              @configuring="step = 'type'"
+              @submitted="step = 'result'"
+            />
+          </div>
         </template>
       </section>
     </div>
@@ -1011,8 +1064,7 @@ onUnmounted(() => {
   transition: 0.2s ease;
 }
 
-.document-type-card:hover,
-.document-type-card--active {
+.document-type-card:hover {
   color: #075d72;
   background: linear-gradient(135deg, #effffb, #f4f8ff);
   border-color: rgb(20 184 166 / 58%);
@@ -1049,14 +1101,42 @@ onUnmounted(() => {
   color: #ccd8df;
 }
 
-.document-type-card--active .document-type-check {
+.document-type-card:hover .document-type-check {
   color: #14b8a6;
 }
 
 .selector-actions {
   display: flex;
+  gap: 12px;
   justify-content: flex-end;
   margin-top: 26px;
+}
+
+.paper-submit-panel {
+  width: min(760px, 100%);
+  padding: 32px;
+  margin: 0 auto;
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid rgb(174 211 224 / 66%);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgb(38 102 138 / 9%);
+}
+
+.paper-submit-panel h2 {
+  margin: 10px 0;
+  font-size: 24px;
+  color: #13243a;
+}
+
+.paper-submit-panel p {
+  color: #5f7388;
+}
+
+.material-workflow-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-bottom: 16px;
 }
 
 .selected-document-summary {

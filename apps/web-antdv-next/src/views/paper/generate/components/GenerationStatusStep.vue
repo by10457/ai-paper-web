@@ -63,7 +63,7 @@ const statusTone = computed(() => {
         />
       </div>
       <div class="status-copy">
-        <div class="section-kicker">STEP 03</div>
+        <div class="section-kicker">STEP 05</div>
         <h2>{{ statusText }}</h2>
         <p v-if="statusMessage">{{ statusMessage }}</p>
         <p v-if="order?.order_sn">订单号：{{ order.order_sn }}</p>

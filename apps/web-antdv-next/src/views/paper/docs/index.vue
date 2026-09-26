@@ -139,13 +139,9 @@ Content-Type: application/json
 
 {
   "title": "基于深度学习的图像识别技术研究",
-  "form_params": {
-    "lengthnum": 8000,
-    "codetype": "Python",
-    "language": "否",
-    "wxnum": 25,
-    "wxquote": "标注"
-  },
+  "target_word_count": 8000,
+  "chinese_reference_count": 20,
+  "english_reference_count": 5,
   "about_msg": "侧重算法应用与实验分析",
   "three_level": false
 }</pre>

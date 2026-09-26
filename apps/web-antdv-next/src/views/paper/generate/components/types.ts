@@ -1,20 +1,13 @@
 export interface GenerateFormState {
   about_msg: string;
-  codetype: string;
-  language: string;
+  chinese_reference_count: number;
+  english_reference_count: number;
   target_word_count: number;
   three_level: boolean;
   title: string;
-  wxnum: number;
-  wxquote: string;
 }
 
-export interface SelectOption {
-  label: string;
-  value: string;
-}
-
-export type WorkflowStep = 'config' | 'outline' | 'result';
+export type WorkflowStep = 'config' | 'outline' | 'result' | 'type';
 
 export {
   type PaperOrderCreateResult,

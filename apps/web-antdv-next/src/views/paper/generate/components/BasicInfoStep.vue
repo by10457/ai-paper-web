@@ -1,16 +1,13 @@
 <script lang="ts" setup>
-import type { GenerateFormState, SelectOption } from './types';
+import type { GenerateFormState } from './types';
 
 import { IconifyIcon } from '@vben/icons';
 
 const props = defineProps<{
-  codeTypeOptions: SelectOption[];
   form: GenerateFormState;
   hideTitle?: boolean;
   loading: boolean;
   progress: number;
-  quoteOptions: SelectOption[];
-  yesNoOptions: SelectOption[];
 }>();
 
 const emit = defineEmits<{
@@ -31,20 +28,12 @@ function updateTargetWordCount(value: null | number) {
   updateForm({ target_word_count: value ?? props.form.target_word_count });
 }
 
-function updateReferenceCount(value: null | number) {
-  updateForm({ wxnum: value ?? props.form.wxnum });
+function updateChineseCount(value: null | number) {
+  updateForm({ chinese_reference_count: value ?? 0 });
 }
 
-function updateCodeType(value: string) {
-  updateForm({ codetype: value });
-}
-
-function updateQuoteType(value: string) {
-  updateForm({ wxquote: value });
-}
-
-function updateLanguage(value: string) {
-  updateForm({ language: value });
+function updateEnglishCount(value: null | number) {
+  updateForm({ english_reference_count: value ?? 0 });
 }
 
 function updateThreeLevel(checked: boolean) {
@@ -74,9 +63,11 @@ function updateAboutMessage(value: string) {
 
     <section class="step-grid">
       <div class="step-panel step-panel--primary">
-        <div class="section-kicker">STEP 01</div>
-        <h2>配置论文参数并生成大纲</h2>
-        <p>标题已经确认，完善生成参数后系统会生成可编辑的大纲结构。</p>
+        <div class="section-kicker">STEP 02</div>
+        <h2>配置参数并生成大纲</h2>
+        <p>
+          这些参数用于规划大纲和后续论文；材料的正文篇幅与资料数量可在选定类型后单独设置。
+        </p>
 
         <div class="console-panel">
           <div class="console-head">
@@ -94,7 +85,9 @@ function updateAboutMessage(value: string) {
           </div>
           <div class="console-line">
             <span>references</span>
-            <strong>{{ form.wxnum }}</strong>
+            <strong>{{
+              form.chinese_reference_count + form.english_reference_count
+            }}</strong>
           </div>
           <div class="console-flow">
             <i></i>
@@ -116,7 +109,7 @@ function updateAboutMessage(value: string) {
           </a-form-item>
 
           <div class="form-grid">
-            <a-form-item label="目标字数">
+            <a-form-item label="大纲规划篇幅">
               <a-input-number
                 :value="form.target_word_count"
                 class="full-input"
@@ -125,34 +118,24 @@ function updateAboutMessage(value: string) {
                 @update:value="updateTargetWordCount"
               />
             </a-form-item>
-            <a-form-item label="参考文献数量">
+            <a-form-item label="中文参考文献（篇）">
               <a-input-number
-                :value="form.wxnum"
+                :value="form.chinese_reference_count"
                 class="full-input"
-                :max="80"
-                :min="5"
-                @update:value="updateReferenceCount"
+                :max="100 - form.english_reference_count"
+                :min="0"
+                :precision="0"
+                @update:value="updateChineseCount"
               />
             </a-form-item>
-            <a-form-item label="代码语言">
-              <a-select
-                :value="form.codetype"
-                :options="codeTypeOptions"
-                @update:value="updateCodeType"
-              />
-            </a-form-item>
-            <a-form-item label="文献标注">
-              <a-select
-                :value="form.wxquote"
-                :options="quoteOptions"
-                @update:value="updateQuoteType"
-              />
-            </a-form-item>
-            <a-form-item label="外文文献">
-              <a-select
-                :value="form.language"
-                :options="yesNoOptions"
-                @update:value="updateLanguage"
+            <a-form-item label="英文参考文献（篇）">
+              <a-input-number
+                :value="form.english_reference_count"
+                class="full-input"
+                :max="100 - form.chinese_reference_count"
+                :min="0"
+                :precision="0"
+                @update:value="updateEnglishCount"
               />
             </a-form-item>
             <a-form-item label="三级大纲">
@@ -166,9 +149,15 @@ function updateAboutMessage(value: string) {
             </a-form-item>
           </div>
 
+          <p class="reference-hint">
+            正文默认标注文献；代码内容由 AI 根据课题需要安排。中英文文献合计
+            1–100 篇。
+          </p>
+
           <a-form-item label="写作方向补充">
             <a-textarea
               :value="form.about_msg"
+              :maxlength="1000"
               :rows="5"
               placeholder="可填写研究对象、技术路线、学校格式要求等"
               @update:value="updateAboutMessage"
