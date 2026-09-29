@@ -38,7 +38,6 @@ import OutlineEditorStep from './components/OutlineEditorStep.vue';
 type GenerateDocumentType = 'thesis' | ThesisMaterialDocumentType;
 
 const OUTLINE_PROGRESS_DURATION = 20_000;
-const PAPER_PROGRESS_DURATION = 5 * 60_000;
 
 const outlineLoading = ref(false);
 const submitLoading = ref(false);
@@ -208,15 +207,14 @@ function stopOutlineProgress(completed: boolean) {
 
 function startPaperProgress() {
   clearTimer(paperProgressTimer);
-  startProgress(paperProgress, PAPER_PROGRESS_DURATION, (timer) => {
-    paperProgressTimer = timer;
-  });
+  paperProgressTimer = null;
+  paperProgress.value = 3;
 }
 
 function stopPaperProgress(completed: boolean) {
   clearTimer(paperProgressTimer);
   paperProgressTimer = null;
-  paperProgress.value = completed ? 100 : Math.max(paperProgress.value, 99);
+  if (completed) paperProgress.value = 100;
 }
 
 function stopPolling() {
@@ -253,7 +251,7 @@ function resetResultState() {
 function applyStatusResult(result: PaperOrderStatus) {
   status.value = result;
   if (typeof result.progress === 'number') {
-    paperProgress.value = Math.max(paperProgress.value, result.progress);
+    paperProgress.value = Math.min(100, Math.max(0, result.progress));
   }
   if (result.status === 'completed') {
     stopPolling();
@@ -263,7 +261,7 @@ function applyStatusResult(result: PaperOrderStatus) {
     stopPolling();
     stopStatusStream();
     stopPaperProgress(false);
-  } else if (shouldPoll(result) && !paperProgressTimer) startPaperProgress();
+  }
 }
 
 function startStatusStream() {
