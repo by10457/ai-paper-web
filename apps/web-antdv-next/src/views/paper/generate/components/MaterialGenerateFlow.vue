@@ -35,10 +35,6 @@ let pollTimer: null | ReturnType<typeof setInterval> = null;
 
 const form = reactive({
   direction: '',
-  end_date: '',
-  chinese_reference_count: props.thesisConfig.chinese_reference_count,
-  english_reference_count: props.thesisConfig.english_reference_count,
-  start_date: '',
   target_word_count: 4000,
 });
 
@@ -48,13 +44,10 @@ const currentProduct = computed(() =>
 const wordLimits = computed(() =>
   props.documentType === 'proposal_report'
     ? { max: 12_000, min: 2500 }
-    : { max: 20_000, min: 3500 },
+    : (props.documentType === 'task_book'
+      ? { max: 6000, min: 1000 }
+      : { max: 20_000, min: 3500 }),
 );
-const referenceLimits = computed(() => {
-  if (props.documentType === 'proposal_report') return { max: 40, min: 8 };
-  if (props.documentType === 'literature_review') return { max: 60, min: 12 };
-  return { max: 30, min: 5 };
-});
 const materialCopy = computed(() => {
   const copyMap: Record<
     ThesisMaterialDocumentType,
@@ -63,7 +56,6 @@ const materialCopy = computed(() => {
       directionLabel: string;
       directionPlaceholder: string;
       parameterHint: string;
-      scheduleLabel: string;
     }
   > = {
     literature_review: {
@@ -71,24 +63,21 @@ const materialCopy = computed(() => {
       directionLabel: '综述范围与关注重点',
       directionPlaceholder:
         '可选；说明文献范围、时间跨度、研究方法或重点关注的问题',
-      parameterHint: '设置综述篇幅和需要覆盖的参考资料规模。',
-      scheduleLabel: '',
+      parameterHint: '只需设置本文档篇幅；文献配置和研究范围继承已确认的大纲。',
     },
     proposal_report: {
       description: '形成研究背景、目标、内容、方法和实施计划。',
       directionLabel: '研究方向与补充要求',
       directionPlaceholder:
         '可选；说明研究对象、研究方法、技术路线或学校格式要求',
-      parameterHint: '设置报告篇幅、参考资料规模和计划周期。',
-      scheduleLabel: '研究计划周期',
+      parameterHint: '只需设置本文档篇幅；文献配置和研究范围继承已确认的大纲。',
     },
     task_book: {
       description: '明确课题目标、主要任务、成果要求和阶段安排。',
       directionLabel: '任务要求与预期成果',
       directionPlaceholder:
         '可选；说明课题范围、交付成果、技术要求或学校任务书规范',
-      parameterHint: '设置任务资料规模和执行周期。',
-      scheduleLabel: '任务执行周期',
+      parameterHint: '只需设置本文档篇幅；文献配置和研究范围继承已确认的大纲。',
     },
   };
   return copyMap[props.documentType];
@@ -135,35 +124,24 @@ function startPolling() {
 }
 
 async function submit() {
-  const total = form.chinese_reference_count + form.english_reference_count;
-  if (total < referenceLimits.value.min || total > referenceLimits.value.max) {
-    message.warning(
-      `中英文参考文献合计需为 ${referenceLimits.value.min}–${referenceLimits.value.max} 篇`,
-    );
+  if (!form.target_word_count || form.target_word_count < wordLimits.value.min || form.target_word_count > wordLimits.value.max) {
+    message.warning('请填写有效的文档目标字数');
     return;
   }
   submitting.value = true;
   try {
     const payload: Record<string, any> = {
-      reference_options: {
-        chinese_reference_count: form.chinese_reference_count,
-        english_reference_count: form.english_reference_count,
-      },
+      target_word_count: form.target_word_count,
       research_context: { direction: form.direction || undefined },
-      schedule_options: {
-        end_date: form.end_date || undefined,
-        start_date: form.start_date || undefined,
-      },
       source_outline: props.sourceOutline,
       thesis_config: {
+        chinese_reference_count: props.thesisConfig.chinese_reference_count,
+        english_reference_count: props.thesisConfig.english_reference_count,
         aboutmsg: props.thesisConfig.about_msg,
         target_word_count: props.thesisConfig.target_word_count,
       },
       title: props.title.trim(),
     };
-    if (props.documentType !== 'task_book') {
-      payload.target_word_count = form.target_word_count;
-    }
     const submitted = await submitThesisMaterialDocument(
       props.documentType,
       payload,
@@ -261,7 +239,7 @@ onBeforeUnmount(stopPolling);
             <span>1</span>
             <div>
               <strong>{{ materialCopy.directionLabel }}</strong>
-              <small>不填写时，系统会根据题目自动补充合适的写作方向。</small>
+              <small>不填写时，系统将沿用已确认大纲和大纲阶段的补充要求。</small>
             </div>
           </div>
           <a-form-item>
@@ -284,7 +262,7 @@ onBeforeUnmount(stopPolling);
             </div>
           </div>
           <a-row :gutter="20">
-            <a-col v-if="documentType !== 'task_book'" :md="8" :xs="24">
+            <a-col :md="8" :xs="24">
               <a-form-item label="目标字数">
                 <a-input-number
                   v-model:value="form.target_word_count"
@@ -294,52 +272,15 @@ onBeforeUnmount(stopPolling);
                 />
               </a-form-item>
             </a-col>
-            <a-col :md="8" :xs="24">
-              <a-form-item label="中文参考文献（篇）">
-                <a-input-number
-                  v-model:value="form.chinese_reference_count"
-                  :max="referenceLimits.max"
-                  :min="0"
-                  :precision="0"
-                  class="w-full"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col :md="8" :xs="24">
-              <a-form-item
-                label="英文参考文献（篇）"
-                :help="`合计 ${referenceLimits.min}–${referenceLimits.max} 篇，正文默认标注`"
-              >
-                <a-input-number
-                  v-model:value="form.english_reference_count"
-                  :max="referenceLimits.max"
-                  :min="0"
-                  :precision="0"
-                  class="w-full"
-                />
-              </a-form-item>
-            </a-col>
-            <a-col
-              v-if="documentType !== 'literature_review'"
-              :md="documentType === 'proposal_report' ? 24 : 8"
-              :xs="24"
-            >
-              <a-form-item :label="materialCopy.scheduleLabel">
-                <a-space-compact block>
-                  <a-date-picker
-                    v-model:value="form.start_date"
-                    placeholder="开始日期"
-                    value-format="YYYY-MM-DD"
-                  />
-                  <a-date-picker
-                    v-model:value="form.end_date"
-                    placeholder="结束日期"
-                    value-format="YYYY-MM-DD"
-                  />
-                </a-space-compact>
-              </a-form-item>
-            </a-col>
           </a-row>
+          <p class="material-profile-hint">
+            已继承大纲：中文参考文献 {{ thesisConfig.chinese_reference_count }} 篇，
+            英文参考文献 {{ thesisConfig.english_reference_count }} 篇。
+            如需调整，请返回大纲配置。
+            <template v-if="documentType !== 'literature_review'">
+              进度计划按相对周次生成，无需填写具体日期。
+            </template>
+          </p>
         </section>
 
         <p

@@ -62,7 +62,7 @@ function updateAboutMessage(value: string) {
         <div class="section-kicker">STEP 02</div>
         <h2>配置参数并生成大纲</h2>
         <p>
-          这些参数用于规划大纲和后续论文；材料的正文篇幅与资料数量可在选定类型后单独设置。
+          这些参数用于规划大纲和后续论文；三类材料继承此处的文献配置，正文篇幅可在选定类型后单独设置。
         </p>
 
         <div class="console-panel">

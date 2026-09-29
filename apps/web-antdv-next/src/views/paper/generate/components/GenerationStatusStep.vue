@@ -92,11 +92,11 @@ const statusTone = computed(() => {
           </template>
           复制链接
         </a-button>
-        <a-button v-if="status?.status === 'failed'" type="primary" @click="$emit('backToOutline')">
+        <a-button v-if="status && ['failed', 'completed'].includes(status.status)" @click="$emit('backToOutline')">
           <template #icon>
             <IconifyIcon icon="lucide:arrow-left" />
           </template>
-          返回大纲
+          返回大纲，生成其他文档
         </a-button>
       </div>
     </div>
